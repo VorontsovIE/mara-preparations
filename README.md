@@ -7,6 +7,6 @@ Put two files into source_data folder:
 ## Processing
 See `process.sh`
 
-— Take CAGE peaks [-250; +50] around peak maxima. Coordinates are in the hg38 assembly.
-— Hocomoco 12, in-vivo, full collection is used.
-— Sum-occupancy (PFM pseudocount = 0.0001) is calculated for each motif, each interval.
+* Take CAGE peaks [-250; +50] around peak maxima. Coordinates are in the hg38 assembly.
+* Hocomoco 12, in-vivo, full collection is used.
+* Sum-occupancy (PFM pseudocount = 0.0001) is calculated for each motif, each interval.
