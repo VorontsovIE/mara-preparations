@@ -23,12 +23,12 @@ ln -s ../../source_data/Credible_TSSclusters_regions.bed stages/stage_01/
 ln -s ../../source_data/Credible_TSSclusters_TMMnormalized_logCPM.tsv stages/stage_01/
 
 mkdir -p ./stages/stage_02/
-cat ./stages/stage_01/Credible_TSSclusters_regions.bed | awktab -e '
+cat ./stages/stage_01/Credible_TSSclusters_regions.bed | awk -F $'\t' -e '
     ($6 == "+") { print $1 "\t" ($5 - 250) "\t" ($5 + 51)  "\t" $4 "\t" "." "\t" "+"};
     ($6 == "-") { print $1 "\t" ($5 - 50)  "\t" ($5 + 251) "\t" $4 "\t" "." "\t" "-" };
   ' > ./stages/stage_02/TSS_clusters_250_50_around_center.bed
 
-cat ./stages/stage_01/Credible_TSSclusters_regions.bed | awktab -e '
+cat ./stages/stage_01/Credible_TSSclusters_regions.bed | awk -F $'\t' -e '
     ($6 == "+") { print $1 "\t" ($5 - 400) "\t" ($5 + 101)  "\t" $4 "\t" "." "\t" "+"};
     ($6 == "-") { print $1 "\t" ($5 - 100)  "\t" ($5 + 401) "\t" $4 "\t" "." "\t" "-" };
   ' > ./stages/stage_02/TSS_clusters_400_100_around_center.bed
