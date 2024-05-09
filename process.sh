@@ -28,6 +28,12 @@ cat ./stages/stage_01/Credible_TSSclusters_regions.bed | awktab -e '
     ($6 == "-") { print $1 "\t" ($5 - 50)  "\t" ($5 + 251) "\t" $4 "\t" "." "\t" "-" };
   ' > ./stages/stage_02/TSS_clusters_250_50_around_center.bed
 
+cat ./stages/stage_01/Credible_TSSclusters_regions.bed | awktab -e '
+    ($6 == "+") { print $1 "\t" ($5 - 400) "\t" ($5 + 101)  "\t" $4 "\t" "." "\t" "+"};
+    ($6 == "-") { print $1 "\t" ($5 - 100)  "\t" ($5 + 401) "\t" $4 "\t" "." "\t" "-" };
+  ' > ./stages/stage_02/TSS_clusters_400_100_around_center.bed
+
+
 mkdir -p ./stages/stage_03/
 bedtools getfasta -bed ./stages/stage_02/TSS_clusters_250_50_around_center.bed \
                   -fi source_data/genome/hg38.fa \
@@ -35,8 +41,15 @@ bedtools getfasta -bed ./stages/stage_02/TSS_clusters_250_50_around_center.bed \
                   -s \
     > ./stages/stage_03/TSS_clusters_250_50_around_center.fa
 
+bedtools getfasta -bed ./stages/stage_02/TSS_clusters_400_100_around_center.bed \
+                  -fi source_data/genome/hg38.fa \
+                  -name+ \
+                  -s \
+    > ./stages/stage_03/TSS_clusters_400_100_around_center.fa
+
+
 mkdir -p ./stages/stage_04/
-for MOTIF_FN in $( find source_data/motifs/pfm/ -xtype f ); do
+for MOTIF_FN in $( find source_data/motifs/pfm/ -xtype f -iname '*.pfm' ); do
     MOTIF_BN=$(basename -s .pfm "${MOTIF_FN}" )
     echo "java -cp app/sarus.jar ru.autosome.SARUS ./stages/stage_03/TSS_clusters_250_50_around_center.fa"  \
             "${MOTIF_FN}" \
@@ -44,5 +57,13 @@ for MOTIF_FN in $( find source_data/motifs/pfm/ -xtype f ); do
             --pfm-pseudocount 0.0001 \
             --naive \
         " | ruby app/convert_sarus_scoresFasta_to_tsv.rb " \
-        " > ./stages/stage_04/occupancy@${MOTIF_BN}.tsv "
-done | parallel
+        " > ./stages/stage_04/occupancy@${MOTIF_BN}@TSS_250_50.bed "
+
+        echo "java -cp app/sarus.jar ru.autosome.SARUS ./stages/stage_03/TSS_clusters_400_100_around_center.fa"  \
+            "${MOTIF_FN}" \
+            pfm-sum-occupancy \
+            --pfm-pseudocount 0.0001 \
+            --naive \
+        " | ruby app/convert_sarus_scoresFasta_to_tsv.rb " \
+        " > ./stages/stage_04/occupancy@${MOTIF_BN}@TSS_400_100.bed "
+done | parallel -j 30
