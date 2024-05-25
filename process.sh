@@ -23,47 +23,47 @@ ln -s ../../source_data/Credible_TSSclusters_regions.bed stages/stage_01/
 ln -s ../../source_data/Credible_TSSclusters_TMMnormalized_logCPM.tsv stages/stage_01/
 
 mkdir -p ./stages/stage_02/
-cat ./stages/stage_01/Credible_TSSclusters_regions.bed | awk -F $'\t' -e '
-    ($6 == "+") { print $1 "\t" ($5 - 250) "\t" ($5 + 51)  "\t" $4 "\t" "." "\t" "+"};
-    ($6 == "-") { print $1 "\t" ($5 - 50)  "\t" ($5 + 251) "\t" $4 "\t" "." "\t" "-" };
-  ' > ./stages/stage_02/TSS_clusters_250_50_around_center.bed
-
-cat ./stages/stage_01/Credible_TSSclusters_regions.bed | awk -F $'\t' -e '
-    ($6 == "+") { print $1 "\t" ($5 - 400) "\t" ($5 + 101)  "\t" $4 "\t" "." "\t" "+"};
-    ($6 == "-") { print $1 "\t" ($5 - 100)  "\t" ($5 + 401) "\t" $4 "\t" "." "\t" "-" };
-  ' > ./stages/stage_02/TSS_clusters_400_100_around_center.bed
-
+make_flanks() {
+  FLANK_5=$1
+  FLANK_3=$2
+  cat ./stages/stage_01/Credible_TSSclusters_regions.bed | awk -F $'\t' -e "
+      (\$6 == \"+\") { print \$1 \"\t\" (\$5 - ${FLANK_5}) \"\t\" (\$5 + ${FLANK_3} + 1)  \"\t\" \$4 \"\t\" \".\" \"\t\" \"+\" };
+      (\$6 == \"-\") { print \$1 \"\t\" (\$5 - ${FLANK_3})  \"\t\" (\$5 + ${FLANK_5} + 1) \"\t\" \$4 \"\t\" \".\" \"\t\" \"-\" };
+    " > ./stages/stage_02/TSS_clusters_${FLANK_5}_${FLANK_3}_around_center.bed
+}
+make_flanks 250 50
+make_flanks 400 100
 
 mkdir -p ./stages/stage_03/
-bedtools getfasta -bed ./stages/stage_02/TSS_clusters_250_50_around_center.bed \
-                  -fi source_data/genome/hg38.fa \
-                  -name+ \
-                  -s \
-    > ./stages/stage_03/TSS_clusters_250_50_around_center.fa
-
-bedtools getfasta -bed ./stages/stage_02/TSS_clusters_400_100_around_center.bed \
-                  -fi source_data/genome/hg38.fa \
-                  -name+ \
-                  -s \
-    > ./stages/stage_03/TSS_clusters_400_100_around_center.fa
-
+flanks_fasta() {
+  FLANK_5=$1
+  FLANK_3=$2
+  bedtools getfasta -bed ./stages/stage_02/TSS_clusters_${FLANK_5}_${FLANK_3}_around_center.bed \
+                    -fi source_data/genome/hg38.fa \
+                    -name+ \
+                    -s \
+      > ./stages/stage_03/TSS_clusters_${FLANK_5}_${FLANK_3}_around_center.fa
+}
+flanks_fasta 250 50
+flanks_fasta 400 100
 
 mkdir -p ./stages/stage_04/
-for MOTIF_FN in $( find source_data/motifs/pfm/ -xtype f -iname '*.pfm' ); do
-    MOTIF_BN=$(basename -s .pfm "${MOTIF_FN}" )
-    echo "java -cp app/sarus.jar ru.autosome.SARUS ./stages/stage_03/TSS_clusters_250_50_around_center.fa"  \
-            "${MOTIF_FN}" \
-            pfm-sum-occupancy \
-            --pfm-pseudocount 0.0001 \
-            --naive \
-        " | ruby app/convert_sarus_scoresFasta_to_tsv.rb " \
-        " > ./stages/stage_04/occupancy@${MOTIF_BN}@TSS_250_50.bed "
+motif_occupancies_cmd(){
+  FLANK_5=$1
+  FLANK_3=$2
+  for MOTIF_FN in $( find source_data/motifs/pfm/ -xtype f -iname '*.pfm' ); do
+      MOTIF_BN=$(basename -s .pfm "${MOTIF_FN}" )
+      echo "java -cp app/sarus.jar ru.autosome.SARUS ./stages/stage_03/TSS_clusters_${FLANK_5}_${FLANK_3}_around_center.fa"  \
+              "${MOTIF_FN}" \
+              pfm-sum-occupancy \
+              --pfm-pseudocount 0.0001 \
+              --naive \
+          " | ruby app/convert_sarus_scoresFasta_to_tsv.rb " \
+          " > ./stages/stage_04/occupancy@${MOTIF_BN}@TSS_${FLANK_5}_${FLANK_3}.bed "
+  done
+}
 
-        echo "java -cp app/sarus.jar ru.autosome.SARUS ./stages/stage_03/TSS_clusters_400_100_around_center.fa"  \
-            "${MOTIF_FN}" \
-            pfm-sum-occupancy \
-            --pfm-pseudocount 0.0001 \
-            --naive \
-        " | ruby app/convert_sarus_scoresFasta_to_tsv.rb " \
-        " > ./stages/stage_04/occupancy@${MOTIF_BN}@TSS_400_100.bed "
-done | parallel -j 30
+(
+  motif_occupancies_cmd 250 50
+  motif_occupancies_cmd 400 100
+) | parallel -j 30
