@@ -34,6 +34,9 @@ make_flanks() {
 make_flanks 250 50
 make_flanks 400 100
 
+make_flanks 300 100
+make_flanks 200 50
+
 mkdir -p ./stages/stage_03/
 flanks_fasta() {
   FLANK_5=$1
@@ -46,6 +49,9 @@ flanks_fasta() {
 }
 flanks_fasta 250 50
 flanks_fasta 400 100
+
+flanks_fasta 300 100
+flanks_fasta 200 50
 
 mkdir -p ./stages/stage_04/
 motif_occupancies_cmd(){
@@ -66,4 +72,7 @@ motif_occupancies_cmd(){
 (
   motif_occupancies_cmd 250 50
   motif_occupancies_cmd 400 100
+
+  motif_occupancies_cmd 300 100
+  motif_occupancies_cmd 200 50
 ) | parallel -j 30
