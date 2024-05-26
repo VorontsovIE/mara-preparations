@@ -69,6 +69,22 @@ motif_occupancies_cmd(){
   done
 }
 
+motif_besthits_cmd(){
+  FLANK_5=$1
+  FLANK_3=$2
+  for MOTIF_FN in $( find source_data/motifs/pwm/ -xtype f -iname '*.pwm' ); do
+      MOTIF_BN=$(basename -s .pwm "${MOTIF_FN}" )
+      echo "java -cp app/sarus.jar ru.autosome.SARUS ./stages/stage_03/TSS_clusters_${FLANK_5}_${FLANK_3}_around_center.fa"  \
+              "${MOTIF_FN}" \
+              besthit \
+              --pvalues-file "source_data/motifs/thresholds/${MOTIF_BN}.thr" \
+              --output-scoring-mode logpvalue \
+          " | ruby app/convert_sarus_scoresFasta_to_tsv.rb " \
+          " > ./stages/stage_04/besthit@${MOTIF_BN}@TSS_${FLANK_5}_${FLANK_3}.bed "
+  done
+}
+
+
 (
   motif_occupancies_cmd 250 50
   motif_occupancies_cmd 400 100
@@ -76,3 +92,19 @@ motif_occupancies_cmd(){
   motif_occupancies_cmd 300 100
   motif_occupancies_cmd 200 50
 ) | parallel -j 30
+
+
+make_flanks 300 50
+make_flanks 400 50
+make_flanks 250 25
+flanks_fasta 300 50
+flanks_fasta 400 50
+flanks_fasta 250 25
+
+(
+  motif_occupancies_cmd 300 50
+  motif_occupancies_cmd 400 50
+  motif_occupancies_cmd 250 25
+) | parallel -j 175
+
+motif_besthits_cmd 250 50 | parallel -j 175
