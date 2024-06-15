@@ -1,4 +1,4 @@
-PATTERN = /^>(?<name>\w+)::(?<chr>chr\w+):(?<from>\d+)-(?<to>\d+)\((?<strand>[+-])\)$/
+PATTERN = /^>(?<name>.+)::(?<chr>chr\w+):(?<from>\d+)-(?<to>\d+)\((?<strand>[+-])\)$/
 ARGF.readlines.map(&:chomp).each_slice(2){|hdr,score|
   m = hdr.match(PATTERN)
   chr, from, to, name, strand = m.named_captures.values_at('chr', 'from', 'to', 'name', 'strand')
