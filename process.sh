@@ -3,10 +3,7 @@ make_flanks() {
   FLANK_3=$2
   INPUT_FN="$3" # ./stages/stage_01/Credible_TSSclusters_regions.bed
   OUTPUT_FN_PREFIX="$4" # ./stages/stage_02/TSS_clusters
-  cat ${INPUT_FN} | awk -F $'\t' -e "
-      (\$6 == \"+\") { print \$1 \"\t\" (\$5 - ${FLANK_5}) \"\t\" (\$5 + ${FLANK_3} + 1)  \"\t\" \$4 \"\t\" \".\" \"\t\" \"+\" };
-      (\$6 == \"-\") { print \$1 \"\t\" (\$5 - ${FLANK_3})  \"\t\" (\$5 + ${FLANK_5} + 1) \"\t\" \$4 \"\t\" \".\" \"\t\" \"-\" };
-    " > ${OUTPUT_FN_PREFIX}_${FLANK_5}_${FLANK_3}_around_center.bed
+  ruby make_flanks.rb ${FLANK_5} ${FLANK_3} ${INPUT_FN} > ${OUTPUT_FN_PREFIX}_${FLANK_5}_${FLANK_3}_around_center.bed
 }
 
 flanks_fasta() {
@@ -106,6 +103,7 @@ stage_01() {
   mkdir -p ./stages/stage_01/
 
   ln -s ../../source_data/Credible_TSSclusters_regions.bed stages/stage_01/
+  ln -s ../../source_data/Credible_TSSclusters_regions_summit.bed stages/stage_01/
   ln -s ../../source_data/Credible_TSSclusters_TMMnormalized_logCPM.tsv stages/stage_01/
 
   ln -s ../../source_data/hg38_promoters_v1.bed stages/stage_01.preprocess/
@@ -128,6 +126,16 @@ stage_02() {
   make_flanks 250 25  ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
 
   make_flanks 250 50  ./stages/stage_01/hg38_promoters_v1.bed ./stages/stage_02/hg38_promoters_v1
+  
+  # upstream
+  make_flanks 250u   0  ./stages/stage_01/Credible_TSSclusters_regions_summit.bed ./stages/stage_02/TSS_cluster_summit
+  make_flanks 250u 10d  ./stages/stage_01/Credible_TSSclusters_regions_summit.bed ./stages/stage_02/TSS_cluster_summit
+  make_flanks 250u 20d  ./stages/stage_01/Credible_TSSclusters_regions_summit.bed ./stages/stage_02/TSS_cluster_summit
+
+  # downstream
+  make_flanks 10u  50d  ./stages/stage_01/Credible_TSSclusters_regions_summit.bed ./stages/stage_02/TSS_cluster_summit
+  make_flanks 0    50d  ./stages/stage_01/Credible_TSSclusters_regions_summit.bed ./stages/stage_02/TSS_cluster_summit
+  make_flanks 10d  50d  ./stages/stage_01/Credible_TSSclusters_regions_summit.bed ./stages/stage_02/TSS_cluster_summit
 }
 
 stage_03() {
@@ -142,6 +150,16 @@ stage_03() {
   flanks_fasta 250 25  ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
 
   flanks_fasta 250 50  ./stages/stage_02/hg38_promoters_v1  ./stages/stage_03/hg38_promoters_v1
+
+  # upstream
+  flanks_fasta 250u 0  ./stages/stage_02/TSS_cluster_summit  ./stages/stage_03/TSS_cluster_summit
+  flanks_fasta 250u 10d  ./stages/stage_02/TSS_cluster_summit  ./stages/stage_03/TSS_cluster_summit
+  flanks_fasta 250u 20d  ./stages/stage_02/TSS_cluster_summit  ./stages/stage_03/TSS_cluster_summit
+
+  # downstream
+  flanks_fasta 10u 50d  ./stages/stage_02/TSS_cluster_summit  ./stages/stage_03/TSS_cluster_summit
+  flanks_fasta 0   50d  ./stages/stage_02/TSS_cluster_summit  ./stages/stage_03/TSS_cluster_summit
+  flanks_fasta 10d 50d  ./stages/stage_02/TSS_cluster_summit  ./stages/stage_03/TSS_cluster_summit
 }
 
 stage_04() {
@@ -168,6 +186,31 @@ stage_04() {
   (
    motif_occupancies_cmd 250 50  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
    motif_besthits_cmd 250 50  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
+  ) | parallel -j ${NUM_THREADS}
+
+
+  (
+    # upstream
+    motif_occupancies_cmd 250u 0    ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_occupancies_cmd 250u 10d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_occupancies_cmd 250u 20d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+
+    # downstream
+    motif_occupancies_cmd 10u 50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_occupancies_cmd 0   50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_occupancies_cmd 10d 50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+  ) | parallel -j ${NUM_THREADS}
+
+  (
+    # upstream
+    motif_besthits_cmd 250u 0    ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_besthits_cmd 250u 10d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_besthits_cmd 250u 20d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+
+    # downstream
+    motif_besthits_cmd 10u 50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_besthits_cmd 0   50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_besthits_cmd 10d 50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
   ) | parallel -j ${NUM_THREADS}
 }
 
