@@ -116,16 +116,16 @@ stage_01() {
 
 stage_02() {
   mkdir -p ./stages/stage_02/
-  make_flanks 250 50  ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
-  make_flanks 400 100 ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
-  make_flanks 300 100 ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
-  make_flanks 200 50  ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
+  make_flanks 250u 50d  ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
+  make_flanks 400u 100d ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
+  make_flanks 300u 100d ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
+  make_flanks 200u 50d  ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
 
-  make_flanks 300 50  ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
-  make_flanks 400 50  ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
-  make_flanks 250 25  ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
+  make_flanks 300u 50d  ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
+  make_flanks 400u 50d  ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
+  make_flanks 250u 25d  ./stages/stage_01/Credible_TSSclusters_regions.bed  ./stages/stage_02/TSS_clusters
 
-  make_flanks 250 50  ./stages/stage_01/hg38_promoters_v1.bed ./stages/stage_02/hg38_promoters_v1
+  make_flanks 250u 50d  ./stages/stage_01/hg38_promoters_v1.bed ./stages/stage_02/hg38_promoters_v1
   
   # upstream
   make_flanks 250u   0  ./stages/stage_01/Credible_TSSclusters_regions_summit.bed ./stages/stage_02/TSS_cluster_summit
@@ -140,16 +140,16 @@ stage_02() {
 
 stage_03() {
   mkdir -p ./stages/stage_03/
-  flanks_fasta 250 50  ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
-  flanks_fasta 400 100 ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
-  flanks_fasta 300 100 ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
-  flanks_fasta 200 50  ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
+  flanks_fasta 250u 50d  ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
+  flanks_fasta 400u 100d ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
+  flanks_fasta 300u 100d ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
+  flanks_fasta 200u 50d  ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
 
-  flanks_fasta 300 50  ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
-  flanks_fasta 400 50  ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
-  flanks_fasta 250 25  ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
+  flanks_fasta 300u 50d  ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
+  flanks_fasta 400u 50d  ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
+  flanks_fasta 250u 25d  ./stages/stage_02/TSS_clusters  ./stages/stage_03/TSS_clusters
 
-  flanks_fasta 250 50  ./stages/stage_02/hg38_promoters_v1  ./stages/stage_03/hg38_promoters_v1
+  flanks_fasta 250u 50d  ./stages/stage_02/hg38_promoters_v1  ./stages/stage_03/hg38_promoters_v1
 
   # upstream
   flanks_fasta 250u 0  ./stages/stage_02/TSS_cluster_summit  ./stages/stage_03/TSS_cluster_summit
@@ -167,25 +167,25 @@ stage_04() {
 
   mkdir -p ./stages/stage_04/
   (
-    motif_occupancies_cmd 250 50  ./stages/stage_03/TSS_clusters  TSS
-    motif_occupancies_cmd 400 100 ./stages/stage_03/TSS_clusters  TSS
-    motif_occupancies_cmd 300 100 ./stages/stage_03/TSS_clusters  TSS
-    motif_occupancies_cmd 200 50  ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_cmd 250u 50d  ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_cmd 400u 100d ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_cmd 300u 100d ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_cmd 200u 50d  ./stages/stage_03/TSS_clusters  TSS
 
-    motif_occupancies_cmd 250 50  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
+    motif_occupancies_cmd 250u 50d  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
   ) | parallel -j ${NUM_THREADS}
 
   (
-    motif_occupancies_cmd 300 50  ./stages/stage_03/TSS_clusters  TSS
-    motif_occupancies_cmd 400 50  ./stages/stage_03/TSS_clusters  TSS
-    motif_occupancies_cmd 250 25  ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_cmd 300u 50d  ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_cmd 400u 50d  ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_cmd 250u 25d  ./stages/stage_03/TSS_clusters  TSS
   ) | parallel -j ${NUM_THREADS}
 
-  motif_besthits_cmd 250 50  ./stages/stage_03/TSS_clusters  TSS | parallel -j ${NUM_THREADS}
+  motif_besthits_cmd 250u 50d  ./stages/stage_03/TSS_clusters  TSS | parallel -j ${NUM_THREADS}
 
   (
-   motif_occupancies_cmd 250 50  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
-   motif_besthits_cmd 250 50  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
+   motif_occupancies_cmd 250u 50d  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
+   motif_besthits_cmd 250u 50d  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
   ) | parallel -j ${NUM_THREADS}
 
 
