@@ -1,33 +1,4 @@
 #!/usr/bin/env python
-
-# All available parameters
-USER_INPUT = {
-    'tss_clusters_file',
-    'bed_chunk',
-    'fasta_chunk'
-}
-
-REQUIRED_DATA = {
-    'genome_file',
-    'motif_dir'
-}
-
-REQUIRED_PARAMETERS = {
-    'scoring_mode',
-    'flank_pairs'
-}
-
-OPTIONAL_PARAMETERS = {
-    'num_processes',
-    'log_level',
-    'stage',
-    'chunk_id',
-    'flank_5',
-    'flank_3'
-}
-
-ALL_PARAMETERS = USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS | OPTIONAL_PARAMETERS
-
 import os
 import sys
 import json
@@ -36,6 +7,47 @@ import subprocess
 import argparse
 import shutil
 import logging
+
+
+# All available parameters
+USER_INPUT = {
+    'tss_clusters_file',
+    'bed_chunk', # Remove chunk parallelisation
+    'fasta_chunk' # Remove chunk parallelisation
+}
+
+REQUIRED_DATA = {
+    'genome_file',
+    'motif_dir'
+}
+
+REQUIRED_PARAMETERS = {
+    'flank_5',
+    'flank_3'
+}
+
+OPTIONAL_PARAMETERS = {
+    'scoring_mode',
+    'num_processes',
+    'log_level',
+    'stage',
+    'chunk_id', # Remove chunk parallelisation
+}
+
+AVAILABLE_FLANK_PAIRS = {
+    '250u 0u',
+    '250u 0d', # Handle both 0u and 0d
+    '250u 10d',
+    '250u 20d',
+    '10u 50d',
+    '0u 50d',
+    '0d 50d', # Handle both 0u and 0d
+    '10d 50d'
+}
+
+
+ALL_PARAMETERS = USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS | OPTIONAL_PARAMETERS
+
 
 class ConfigError(Exception):
     pass
@@ -51,6 +63,258 @@ class ExternalToolError(Exception):
 
 class CommandExecutionError(Exception):
     pass
+
+
+class PwmConverter:
+    """
+    A class to convert motif matrices between PCM (Position Count Matrix),
+    PFM (Position Frequency Matrix), and PWM (Position Weight Matrix) formats.
+
+    Attributes:
+        filename (str): The input file name.
+        pseudocount (str or float): The pseudocount method ('log', 'sqrt') or a numeric value.
+        word_count (float): The word count used for PFM to PCM conversion.
+        num_columns (int): The expected number of columns in the input matrix.
+        name (str): The name of the motif.
+        matrix (list of lists): The matrix data.
+        format (str): The format of the input matrix ('pcm', 'pfm', 'pwm').
+
+    Methods:
+        to_pwm():
+            Converts the input matrix to PWM format and returns it as a dictionary.
+    """
+
+    def __init__(self, filename, pseudocount='log', word_count=1000.0, num_columns=4):
+        """
+        Initializes the PwmConverter with the given filename and conversion parameters.
+
+        Parameters:
+            filename (str): The input file name.
+            pseudocount (str or float, optional): The pseudocount method ('log', 'sqrt') or a numeric value.
+                                                  Defaults to 'log'.
+            word_count (float, optional): The word count used for PFM to PCM conversion.
+                                          Defaults to 1000.0.
+            num_columns (int, optional): The expected number of columns in the input matrix.
+                                         Defaults to 4.
+
+        Raises:
+            ValueError: If the input file is not found or the matrix is improperly formatted.
+        """
+        self.filename = filename
+        self.pseudocount = pseudocount
+        self.word_count = word_count
+        self.num_columns = num_columns
+        self.name = ''
+        self.matrix = []
+        self.format = ''
+
+        self._read_matrix()
+        self.format = self._determine_motif_format()
+
+    def _is_float(self, s):
+        """
+        Checks if a string can be converted to a float.
+
+        Parameters:
+            s (str): The string to check.
+
+        Returns:
+            bool: True if convertible to float, False otherwise.
+        """
+        try:
+            float(s)
+            return True
+        except ValueError:
+            return False
+
+    def _determine_motif_format(self):
+        """
+        Determines the motif format based on the file extension.
+
+        Returns:
+            str: The motif format ('pcm', 'pfm', or 'pwm').
+
+        Raises:
+            ValueError: If the file extension is unrecognized.
+        """
+        ext = os.path.splitext(self.filename)[1].lower()
+        if ext == '.pcm':
+            return 'pcm'
+        elif ext in ['.pfm', '.ppm']:
+            return 'pfm'
+        elif ext == '.pwm':
+            return 'pwm'
+        else:
+            raise ValueError(f"Unknown file extension '{ext}' for motif format.")
+
+    def _read_matrix(self):
+        """
+        Reads the matrix from a file or standard input and populates the name and matrix attributes.
+
+        Raises:
+            ValueError: If the file is not found, the input is empty, or the matrix is improperly formatted.
+        """
+        try:
+            with open(self.filename, 'r') as f:
+                lines = f.read().splitlines()
+            self.name = os.path.splitext(os.path.basename(self.filename))[0]
+        except FileNotFoundError:
+            raise ValueError(f"File '{self.filename}' not found.")
+
+        # Remove empty lines and strip whitespace
+        lines = [line.strip() for line in lines if line.strip()]
+        if not lines:
+            raise ValueError("Input is empty.")
+
+        rows = [line.split() for line in lines]
+
+        # Check if the first row has the expected number of columns and all are floats
+        if len(rows[0]) != self.num_columns or not all(self._is_float(x) for x in rows[0]):
+            header = lines.pop(0)
+            if not lines:
+                raise ValueError("No data found after header.")
+            if header.startswith('>'):
+                self.name = header[1:].strip().split()[0]
+            else:
+                self.name = header.strip().split()[0]
+
+        # Convert all elements to floats
+        try:
+            self.matrix = [[float(x) for x in row] for row in rows]
+        except ValueError:
+            raise ValueError("Matrix contains non-numeric values.")
+
+        if not self.matrix:
+            raise ValueError("Matrix is empty.")
+        if not all(len(row) == self.num_columns for row in self.matrix):
+            raise ValueError(f"All rows must have exactly {self.num_columns} columns.")
+
+    def _calculate_pseudocount(self, count):
+        """
+        Calculates the pseudocount based on the specified method.
+
+        Parameters:
+            count (float): The total count for the row.
+
+        Returns:
+            float: The calculated pseudocount.
+
+        Raises:
+            ValueError: If an invalid pseudocount method is provided.
+        """
+        if self.pseudocount == 'log':
+            return math.log(max(count, 2))
+        elif self.pseudocount == 'sqrt':
+            return math.sqrt(count)
+        elif isinstance(self.pseudocount, (int, float)):
+            return self.pseudocount
+        else:
+            raise ValueError(f"Invalid pseudocount value: {self.pseudocount}")
+
+    def _pcm2pfm(self, pcm):
+        """
+        Converts a PCM (Position Count Matrix) to PFM (Position Frequency Matrix).
+
+        Parameters:
+            pcm (dict): A dictionary with 'name' and 'matrix' keys.
+
+        Returns:
+            dict: A dictionary with 'name' and 'matrix' keys representing the PFM.
+
+        Raises:
+            ValueError: If a row sum is zero.
+        """
+        pfm_matrix = []
+        for row in pcm['matrix']:
+            total = sum(row)
+            if total == 0:
+                raise ValueError("Row sum is zero, cannot normalize.")
+            pfm_matrix.append([x / total for x in row])
+        return {'name': pcm['name'], 'matrix': pfm_matrix}
+
+    def _pfm2pcm(self, pfm):
+        """
+        Converts a PFM (Position Frequency Matrix) to PCM (Position Count Matrix).
+
+        Parameters:
+            pfm (dict): A dictionary with 'name' and 'matrix' keys.
+
+        Returns:
+            dict: A dictionary with 'name' and 'matrix' keys representing the PCM.
+        """
+        pcm_matrix = []
+        for row in pfm['matrix']:
+            pcm_matrix.append([el * self.word_count for el in row])
+        return {'name': pfm['name'], 'matrix': pcm_matrix}
+
+    def _pcm2pwm(self, pcm):
+        """
+        Converts a PCM (Position Count Matrix) to PWM (Position Weight Matrix).
+
+        Parameters:
+            pcm (dict): A dictionary with 'name' and 'matrix' keys.
+
+        Returns:
+            dict: A dictionary with 'name' and 'matrix' keys representing the PWM.
+        """
+        pwm_matrix = []
+        for row in pcm['matrix']:
+            count = sum(row)
+            pseudo = self._calculate_pseudocount(count)
+            denominator = 0.25 * (count + pseudo)
+            pwm_row = []
+            for el in row:
+                numerator = el + 0.25 * pseudo
+                pwm_value = math.log(numerator / denominator)
+                pwm_row.append(pwm_value)
+            pwm_matrix.append(pwm_row)
+        return {'name': pcm['name'], 'matrix': pwm_matrix}
+
+    def to_pwm(self):
+        """
+        Converts the input matrix to PWM format.
+
+        Returns:
+            dict: A dictionary with 'name' and 'matrix' keys representing the PWM.
+
+        Raises:
+            ValueError: If the input format is unknown or unsupported for conversion.
+        """
+        if self.format == 'pwm':
+            # Input is already PWM
+            return {'name': self.name, 'matrix': self.matrix}
+        elif self.format == 'pfm':
+            # Convert PFM -> PCM -> PWM
+            pfm = {'name': self.name, 'matrix': self.matrix}
+            pcm = self._pfm2pcm(pfm)
+            pwm = self._pcm2pwm(pcm)
+            return pwm
+        elif self.format == 'pcm':
+            # Convert PCM -> PWM
+            pcm = {'name': self.name, 'matrix': self.matrix}
+            pwm = self._pcm2pwm(pcm)
+            return pwm
+        else:
+            raise ValueError(f"Unknown motif format '{self.format}'.")
+
+    def matrix_as_string(self, model, transpose_output=False):
+        """
+        Converts a matrix model to a string representation.
+
+        Parameters:
+            model (dict): A dictionary with 'name' and 'matrix' keys.
+            transpose_output (bool, optional): Whether to transpose the matrix. Defaults to False.
+
+        Returns:
+            str: The string representation of the matrix.
+        """
+        name = model['name']
+        matrix = model['matrix']
+        if transpose_output:
+            matrix = list(map(list, zip(*matrix)))
+        lines = [f">{name}"]
+        lines += ["\t".join(f"{x:.6f}" for x in row) for row in matrix]
+        return "\n".join(lines)
 
 
 class Config:
@@ -109,12 +373,96 @@ class ArgParser:
         if args.config and not os.path.exists(args.config):
             raise ArgumentError(f"Config file {args.config} does not exist.")
 
+
+class SettingsValidator:
+    def __init__(self, settings: Dict[str, Any]):
+        self.settings = settings
+
+    def validate_settings(self):
+        # Replace with constants
+        USER_INPUT: Set[str] = {"input_file", "output_file"}
+        REQUIRED_DATA: Set[str] = {"reference_genome"}
+        REQUIRED_PARAMETERS: Set[str] = {"flank_5", "flank_3", "scoring_mode"}
+
+        all_required_keys = USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS
+
+        # Step 1: Check for missing required parameters
+        self._check_required_parameters(all_required_keys)
+
+        # Step 2: Validate that required files exist
+        self._validate_files_exist(USER_INPUT | REQUIRED_DATA)
+
+        # Step 3: Validate scoring_mode
+        self._validate_scoring_mode()
+
+        # Step 4: Validate and re-assign flanks
+        self._validate_flanks()
+
+    def get_flanks(self): # Maybe transform into cast_settings later
+        return {'flank_5': self.settings.flank_5, 'flank_3': self.settings.flank_3}
+
+    def _check_required_parameters(self, required_keys: Set[str]):
+        missing_keys = [key for key in required_keys
+                        if key not in self.settings or self.settings[key] is None]
+        if missing_keys:
+            missing = ', '.join(missing_keys)
+            raise ArgumentError(f"Missing required parameter(s): {missing}")
+
+    def _validate_files_exist(self, file_keys: Set[str]):
+        non_existent_files = [
+            key for key in file_keys
+            if key in self.settings and
+               self.settings[key] != 'Unknown' and
+               not os.path.exists(self.settings[key])
+        ]
+        if non_existent_files:
+            errors = [
+                f"No such file or directory for {key.replace('_', ' ')}: {self.settings[key]}"
+                for key in non_existent_files
+            ]
+            error_message = "; ".join(errors)
+            raise ArgumentError(error_message)
+
+    def _validate_scoring_mode(self):
+        valid_modes = {'besthit', 'pfm-sum-occupancy'}
+        scoring_mode = self.settings.get('scoring_mode')
+        if scoring_mode not in valid_modes and not scoring_mode.isnumeric():
+            raise ArgumentError(f"Invalid scoring mode: {scoring_mode}. "
+                                f"Expected p-value or one of folowing: {', '.join(valid_modes)}.")
+
+    def _validate_flanks(self):
+        try:
+            abs_flank_5 = int(self.settings.flank_5[:-1])
+            abs_flank_3 = int(self.settings.flank_3[:-1])
+
+            letter_flank_5 = self.settings.flank_5[:-1]
+            letter_flank_3 = self.settings.flank_3[:-1]
+
+            if not {letter_flank_5, letter_flank_5}.issubset({'u', 'd'}):
+                raise ArgumentError(f'Flank pairs must be one of the following:\n{flank_pairs_text}')
+
+            self.settings.flank_5 = flank_5 = -1 * abs_flank_5 if letter_flank_5 == 'u' else abs_flank_5
+            self.settings.flank_3 = flank_3 = -1 * abs_flank_3 if letter_flank_3 == 'u' else abs_flank_3
+
+        except (ValueError, IndexError):
+            flank_pairs_text = '\n'.join([pair for pair in AVAILABLE_FLANK_PAIRS])
+            raise ArgumentError(f'Flank pairs must be one of the following:\n{flank_pairs_text}')
+
+
+        # In case of reverting back intervals
+        MIN_FLANK_5 = -250
+        MAX_FLANK_5 = 10
+        MIN_FLANK_3 = 0
+        MAX_FLANK_3 = 50
+
+
 class MaraPreprocessingApp:
     def __init__(self, config=None, args=None):
         self.config = config
         self.args = args
         self.settings = self.merge_settings()
         self.validate_settings()
+        self.cast_flanks()
         self.setup_logging()
         self.check_executables()
         self.define_directories()
@@ -135,12 +483,18 @@ class MaraPreprocessingApp:
         # Set defaults
         settings['log_level'] = settings.get('log_level', 'INFO')
         settings['num_processes'] = settings.get('num_processes', os.cpu_count())
-        settings['scoring_mode'] = settings.get('scoring_mode', 'upstream').lower()
+        settings['scoring_mode'] = settings.get('scoring_mode', 'besthit').lower()
         settings['stage'] = settings.get('stage', 'all')
 
         return settings
 
     def validate_settings(self):
+        validator = SettingsValidator(self.settings)
+        validator.validate_settings()
+        self.settings.flank_5 = validator.settings.flank_5
+        self.settings.flank_3 = validator.settings.flank_3
+
+    def validate_settings(self): # To replace with SettingsValidator
         # Check required parameters
         for key in USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS:
             if key not in self.settings or self.settings[key] is None:
@@ -154,27 +508,47 @@ class MaraPreprocessingApp:
                 )
 
         # Validate scoring_mode
-        if self.settings['scoring_mode'] not in ['upstream', 'downstream']:
-            raise ArgumentError(
-                f"Invalid scoring mode: {self.settings['scoring_mode']}"
-            )
 
-        # Parse flank_pairs
+        # Validate and re-assign flanks
+        # Attempt to convert flank_5 to integer
         try:
-            pairs = self.settings['flank_pairs'].split()
-
-            if len(pairs) % 2 != 0:
-                raise ArgumentError("Expected an even number of integers for flank pairs.")
-
-            self.settings['flank_pairs'] = [(int(pairs[i]), int(pairs[i + 1])) for i in range(0, len(pairs), 2)]
-
+            self.settings.flank_5 = int(self.settings.flank_5)
         except ValueError as e:
+            raise ArgumentError("flank_5 must be a valid integer.") from e
+
+        # Attempt to convert flank_3 to integer
+        try:
+            self.settings.flank_3 = int(self.settings.flank_3)
+        except ValueError as e:
+            raise ArgumentError("flank_3 must be a valid integer.") from e
+
+        # Define minimum and maximum values for flank_5 and flank_3
+        MIN_FLANK_5 = 0       # Example minimum value for flank_5
+        MAX_FLANK_5 = 100     # Example maximum value for flank_5
+        MIN_FLANK_3 = 0       # Example minimum value for flank_3
+        MAX_FLANK_3 = 100     # Example maximum value for flank_3
+
+        # Check if both flanks are negative
+        if flank_5 < 0 and flank_3 < 0:
+            raise ArgumentError("Expected an even number of integers for flank pairs.")
+
+        # Validate flank_5 within its range
+        if not (MIN_FLANK_5 <= flank_5 <= MAX_FLANK_5):
             raise ArgumentError(
-                f"Invalid flank pairs format: {str(e)} Each pair must consist of two \
-integers in the format ‘x y’ (e.g., ‘1 2 3 4’). Please ensure \
-that the input is correctly formatted with pairs of \
-space-separated numbers."
+                f"Invalid flank_5 value: {flank_5}. "
+                f"Expected a value between {MIN_FLANK_5} and {MAX_FLANK_5}."
             )
+
+        # Validate flank_3 within its range
+        if not (MIN_FLANK_3 <= flank_3 <= MAX_FLANK_3):
+            raise ArgumentError(
+                f"Invalid flank_3 value: {flank_3}. "
+                f"Expected a value between {MIN_FLANK_3} and {MAX_FLANK_3}."
+            )
+
+        # Assign the validated values back to settings
+        self.settings.flank_5 = flank_5
+        self.settings.flank_3 = flank_3
 
     def setup_logging(self):
         log_level = self.settings.get('log_level', 'INFO').upper()
@@ -352,17 +726,16 @@ space-separated numbers."
         flank_3 = self.settings.get('flank_3')
         output_dir = self.stage_dirs['stage_02']
         output_prefix = os.path.join(output_dir, f'chunk_{chunk_id}')
-        scoring_mode = self.settings['scoring_mode']
 
         if not bed_chunk or flank_5 is None or flank_3 is None or chunk_id is None:
             raise ArgumentError("bed_chunk, flank_5, flank_3, and chunk_id must be provided for flanking_regions stage")
 
 
-        self.make_flanks(flank_5, flank_3, bed_chunk, output_prefix, scoring_mode)
+        self.make_flanks(flank_5, flank_3, bed_chunk, output_prefix)
 
         logging.info(f"Stage 02 completed successfully for chunk {chunk_id}")
 
-    def make_flanks(self, flank_5, flank_3, input_file, output_prefix, scoring_mode):
+    def make_flanks(self, flank_5, flank_3, input_file, output_prefix):
         """Utility function to create flanking regions."""
         output_file = f"{output_prefix}_flanks.bed"
 
@@ -372,14 +745,14 @@ space-separated numbers."
 
         try:
             with open(input_file, 'r') as infile, open(output_file, 'w') as outfile:
-                for line in self.process_bed_file(flank_5, flank_3, infile, scoring_mode):
+                for line in self.process_bed_file(flank_5, flank_3, infile):
                     outfile.write(line + '\n')
             logging.info(f"Generated flanking regions file {output_file}")
         except Exception as e:
             logging.error(f"Error processing BED file {input_file}: {e}")
             raise e
 
-    def process_bed_file(self, flank_5, flank_3, infile, scoring_mode):
+    def process_bed_file(self, flank_5, flank_3, infile):
         """Processes a BED file based on flanking distances and scoring mode."""
         lines = infile.readlines()
         regions = [self.parse_line(line) for line in lines if not line.startswith('#')]
@@ -390,26 +763,14 @@ space-separated numbers."
             name = region['name']
             position = region['chrom_start'] if strand == '+' else region['chrom_end']
 
-            if scoring_mode == 'upstream':
-                if strand == '+':
-                    chrom_start = position - flank_5
-                    chrom_end = position - flank_3
-                elif strand == '-':
-                    chrom_start = position + flank_3
-                    chrom_end = position + flank_5
-                else:
-                    raise ValueError(f"Unknown strand {strand}")
-            elif scoring_mode == 'downstream':
-                if strand == '+':
-                    chrom_start = position + flank_3
-                    chrom_end = position + flank_5
-                elif strand == '-':
-                    chrom_start = position - flank_5
-                    chrom_end = position - flank_3
-                else:
-                    raise ValueError(f"Unknown strand {strand}")
+            if strand == '+':
+                chrom_start = position + flank_5
+                chrom_end = position + flank_3
+            elif strand == '-':
+                chrom_start = position - flank_3
+                chrom_end = position - flank_5
             else:
-                raise ValueError(f"Unknown scoring mode {scoring_mode}")
+                raise ValueError(f"Unknown strand {strand}")
 
             # Ensure chrom_start is not negative
             chrom_start = max(chrom_start, 0)
@@ -454,6 +815,7 @@ space-separated numbers."
         """Stage 04: Perform motif occupancy analysis on a FASTA file chunk."""
         logging.info("Starting Stage 04: Perform motif occupancy analysis")
 
+        scoring_mode = self.settings.scoring_mode
         fasta_chunk = self.settings['fasta_chunk']
         chunk_id = self.settings['chunk_id']
         sarus_jar = 'app/sarus-2.1.0.jar'
@@ -472,7 +834,7 @@ space-separated numbers."
 
         try:
             # Run SARUS for motif occupancy analysis
-            self.run_command(f'java -jar {sarus_jar} --pwm {motifs_dir}/pwm --threshold {motifs_dir}/thresholds --out {sarus_out} --fasta {fasta_chunk}')
+            self.run_command(f'java -jar {sarus_jar} --pwm {motifs_dir}/pwm --threshold {motifs_dir}/thresholds {scoring_mode} --out {sarus_out} --fasta {fasta_chunk}')
 
             # Convert SARUS output to TSV format
             self.convert_sarus_scores_to_tsv(sarus_out_scores, output_tsv)
