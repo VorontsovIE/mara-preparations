@@ -7,6 +7,7 @@ import subprocess
 import argparse
 import shutil
 import logging
+import math
 
 
 # All available parameters
@@ -149,7 +150,7 @@ class PwmConverter:
 
     def _read_matrix(self):
         """
-        Reads the matrix from a file or standard input and populates the name and matrix attributes.
+        Reads the matrix from a file and populates the name and matrix attributes.
 
         Raises:
             ValueError: If the file is not found, the input is empty, or the matrix is improperly formatted.
@@ -157,37 +158,38 @@ class PwmConverter:
         try:
             with open(self.filename, 'r') as f:
                 lines = f.read().splitlines()
-            self.name = os.path.splitext(os.path.basename(self.filename))[0]
         except FileNotFoundError:
             raise ValueError(f"File '{self.filename}' not found.")
 
-        # Remove empty lines and strip whitespace
-        lines = [line.strip() for line in lines if line.strip()]
+        # Remove empty lines, strip whitespace, and remove comments
+        lines = [line.strip() for line in lines if line.strip() and not line.strip().startswith('#')]
+
         if not lines:
             raise ValueError("Input is empty.")
 
-        rows = [line.split() for line in lines]
-
-        # Check if the first row has the expected number of columns and all are floats
-        if len(rows[0]) != self.num_columns or not all(self._is_float(x) for x in rows[0]):
+        # Check if the first line is a header
+        if lines[0].startswith('>'):
             header = lines.pop(0)
-            if not lines:
-                raise ValueError("No data found after header.")
-            if header.startswith('>'):
-                self.name = header[1:].strip().split()[0]
-            else:
-                self.name = header.strip().split()[0]
+            self.name = header[1:].strip().split()[0]
+        else:
+            # Use the filename as the motif name
+            self.name = os.path.splitext(os.path.basename(self.filename))[0]
+
+        if not lines:
+            raise ValueError("No data found after header.")
+
+        # Now, split the lines into rows
+        rows = [line.split() for line in lines if not line.startswith('#') and line]
+
+        # Now check that each row has the expected number of columns
+        for idx, row in enumerate(rows):
+            if len(row) != self.num_columns:
+                raise ValueError(f"All rows must have exactly {self.num_columns} columns. Error at row {idx + 1}.")
+            if not all(self._is_float(x) for x in row):
+                raise ValueError(f"Non-numeric value found in the matrix at row {idx + 1}.")
 
         # Convert all elements to floats
-        try:
-            self.matrix = [[float(x) for x in row] for row in rows]
-        except ValueError:
-            raise ValueError("Matrix contains non-numeric values.")
-
-        if not self.matrix:
-            raise ValueError("Matrix is empty.")
-        if not all(len(row) == self.num_columns for row in self.matrix):
-            raise ValueError(f"All rows must have exactly {self.num_columns} columns.")
+        self.matrix = [[float(x) for x in row] for row in rows]
 
     def _calculate_pseudocount(self, count):
         """
@@ -317,6 +319,95 @@ class PwmConverter:
         return "\n".join(lines)
 
 
+class ThresholdPValueTable:
+    def __init__(self):
+        self._filename = "thresholdPValueTable"
+        self._minScore = None
+        self._maxScore = None
+        self._scoreFactor = None
+        self._granularity = None
+
+    def init(self, min_score, max_score, factor, granularity):
+        self._minScore = min_score
+        self._maxScore = max_score
+        self._scoreFactor = factor
+        self._granularity = granularity
+
+    def get_threshold_pvalue_table(self, matrix):
+        if not matrix:
+            raise ValueError("Matrix cannot be empty")
+
+        e = self._granularity
+        round_matrix = self.get_round_matrix(matrix, e)
+        distribution = self.get_score_distribution(round_matrix)
+        threshold_pvalue_table = [distribution.pop()]
+
+        for i in range(len(distribution)):
+            pair = distribution.pop()
+            score = pair[0]
+            probability = pair[1]
+            previous_pvalue = threshold_pvalue_table[i][1]
+            threshold_pvalue_table.append([score, previous_pvalue + probability])
+
+        return threshold_pvalue_table[::-1]
+
+    def get_score_distribution(self, matrix):
+        if not matrix:
+            raise ValueError("Matrix cannot be empty")
+
+        previous_quantities = {0: 1}
+        new_quantities = {}
+        e = self._granularity
+        total_combinations = 4 ** len(matrix)
+
+        for position in range(len(matrix)):
+            scores = list(previous_quantities.keys())
+            new_quantities = {}
+
+            for score in scores:
+                previous_quantity = previous_quantities[score]
+
+                for letter in range(4):
+                    new_score = score + matrix[position][letter]
+                    quantity = new_quantities.get(new_score, 0)
+                    new_quantities[new_score] = quantity + previous_quantity
+
+            previous_quantities = new_quantities
+
+        sorted_scores = sorted(new_quantities.keys())
+        score_distribution = [
+            [score / 10 ** e, new_quantities[score] / total_combinations]
+            for score in sorted_scores
+        ]
+
+        return score_distribution
+
+    def get_round_matrix(self, matrix, granularity):
+        if not isinstance(granularity, int) or granularity < 0:
+            raise ValueError("Granularity must be a non-negative integer")
+        if not matrix:
+            raise ValueError("Matrix cannot be empty")
+        round_matrix = []
+        for row in matrix:
+            round_row = []
+            for value in row:
+                if not isinstance(value, (int, float)):
+                    raise ValueError(f"Matrix values must be numeric. Invalid value: {value}")
+                round_row.append(int(value * 10 ** granularity))
+            round_matrix.append(round_row)
+        return round_matrix
+
+    def get_best_score(self, matrix):
+        if not matrix:
+            raise ValueError("Matrix cannot be empty")
+        return sum(max(row) for row in matrix)
+
+    def get_worst_score(self, matrix):
+        if not matrix:
+            raise ValueError("Matrix cannot be empty")
+        return sum(min(row) for row in matrix)
+
+
 class Config:
     def __init__(self, config_file):
         self.config_file = config_file
@@ -375,14 +466,14 @@ class ArgParser:
 
 
 class SettingsValidator:
-    def __init__(self, settings: Dict[str, Any]):
+    def __init__(self, settings: dict[str, any]):
         self.settings = settings
 
     def validate_settings(self):
         # Replace with constants
-        USER_INPUT: Set[str] = {"input_file", "output_file"}
-        REQUIRED_DATA: Set[str] = {"reference_genome"}
-        REQUIRED_PARAMETERS: Set[str] = {"flank_5", "flank_3", "scoring_mode"}
+        USER_INPUT: set[str] = {"input_file", "output_file"}
+        REQUIRED_DATA: set[str] = {"reference_genome"}
+        REQUIRED_PARAMETERS: set[str] = {"flank_5", "flank_3", "scoring_mode"}
 
         all_required_keys = USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS
 
@@ -401,14 +492,14 @@ class SettingsValidator:
     def get_flanks(self): # Maybe transform into cast_settings later
         return {'flank_5': self.settings.flank_5, 'flank_3': self.settings.flank_3}
 
-    def _check_required_parameters(self, required_keys: Set[str]):
+    def _check_required_parameters(self, required_keys: set[str]):
         missing_keys = [key for key in required_keys
                         if key not in self.settings or self.settings[key] is None]
         if missing_keys:
             missing = ', '.join(missing_keys)
             raise ArgumentError(f"Missing required parameter(s): {missing}")
 
-    def _validate_files_exist(self, file_keys: Set[str]):
+    def _validate_files_exist(self, file_keys: set[str]):
         non_existent_files = [
             key for key in file_keys
             if key in self.settings and
@@ -908,3 +999,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

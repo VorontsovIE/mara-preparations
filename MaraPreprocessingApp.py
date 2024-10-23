@@ -361,7 +361,7 @@ class MaraPreprocessingApp:
 
         for flank_5, flank_3 in self.settings['flank_pairs']:
             tasks.append((flank_5, flank_3, input_file, output_prefix, scoring_mode))
-            
+
         # Use multiprocessing Pool
         with Pool(processes=self.settings.get('num_processes', os.cpu_count())) as pool:
             pool.starmap(self.make_flanks_wrapper, tasks)

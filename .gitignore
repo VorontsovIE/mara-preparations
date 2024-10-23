@@ -1,3 +1,5 @@
-source_data/
 stages/
 sarus*.jar
+__pycache__
+app/__pycache__
+*test_*py
