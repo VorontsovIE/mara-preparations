@@ -13,7 +13,7 @@ import math
 # All available parameters
 USER_INPUT = {
     'tss_clusters_file',
-    'bed_chunk', # Remove chunk parallelisation
+    'bed_chunk', # TODO Remove chunk parallelisation
     'fasta_chunk' # Remove chunk parallelisation
 }
 
@@ -28,6 +28,7 @@ REQUIRED_PARAMETERS = {
 }
 
 OPTIONAL_PARAMETERS = {
+    'custom_motifs',
     'scoring_mode',
     'num_processes',
     'log_level',
@@ -449,6 +450,13 @@ class ArgParser:
             help='Path to the config JSON file')
 
         for param in USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS | OPTIONAL_PARAMETERS:
+            if param == 'custom_motifs':
+                self.parser.add_argument(
+                    '--custom_motifs',
+                    action='store_true',
+                    help='Use custom motif files and skip downloading data'
+                )
+            else:
                 self.parser.add_argument(
                     f'--{param}',
                     type=str,
@@ -470,7 +478,7 @@ class SettingsValidator:
         self.settings = settings
 
     def validate_settings(self):
-        # Replace with constants
+        # TODO Replace with constants
         USER_INPUT: set[str] = {"input_file", "output_file"}
         REQUIRED_DATA: set[str] = {"reference_genome"}
         REQUIRED_PARAMETERS: set[str] = {"flank_5", "flank_3", "scoring_mode"}
@@ -489,7 +497,7 @@ class SettingsValidator:
         # Step 4: Validate and re-assign flanks
         self._validate_flanks()
 
-    def get_flanks(self): # Maybe transform into cast_settings later
+    def get_flanks(self): # TODO Maybe transform into cast_settings later
         return {'flank_5': self.settings.flank_5, 'flank_3': self.settings.flank_3}
 
     def _check_required_parameters(self, required_keys: set[str]):
@@ -553,7 +561,6 @@ class MaraPreprocessingApp:
         self.args = args
         self.settings = self.merge_settings()
         self.validate_settings()
-        self.cast_flanks()
         self.setup_logging()
         self.check_executables()
         self.define_directories()
@@ -576,6 +583,10 @@ class MaraPreprocessingApp:
         settings['num_processes'] = settings.get('num_processes', os.cpu_count())
         settings['scoring_mode'] = settings.get('scoring_mode', 'besthit').lower()
         settings['stage'] = settings.get('stage', 'all')
+        settings['custom_motifs'] = settings.get('custom_motifs', False)
+        
+        if isinstance(settings['custom_motifs'], str):
+            settings['custom_motifs'] = settings['custom_motifs'].lower() == 'true'
 
         return settings
 
@@ -585,61 +596,61 @@ class MaraPreprocessingApp:
         self.settings.flank_5 = validator.settings.flank_5
         self.settings.flank_3 = validator.settings.flank_3
 
-    def validate_settings(self): # To replace with SettingsValidator
-        # Check required parameters
-        for key in USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS:
-            if key not in self.settings or self.settings[key] is None:
-                raise ArgumentError(f"Missing required parameter: {key}")
+    # def validate_settings(self):
+    #     # Check required parameters
+    #     for key in USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS:
+    #         if key not in self.settings or self.settings[key] is None:
+    #             raise ArgumentError(f"Missing required parameter: {key}")
 
-        # Validate files exist
-        for key in USER_INPUT | REQUIRED_DATA:
-            if key in self.settings and self.settings[key] != 'Unknown' and not os.path.exists(self.settings[key]):
-                raise ArgumentError(
-                    f"No such file or directory for {key.replace('_', ' ')}: {self.settings[key]}"
-                )
+    #     # Validate files exist
+    #     for key in USER_INPUT | REQUIRED_DATA:
+    #         if key in self.settings and self.settings[key] != 'Unknown' and not os.path.exists(self.settings[key]):
+    #             raise ArgumentError(
+    #                 f"No such file or directory for {key.replace('_', ' ')}: {self.settings[key]}"
+    #             )
 
-        # Validate scoring_mode
+    #     # Validate scoring_mode
 
-        # Validate and re-assign flanks
-        # Attempt to convert flank_5 to integer
-        try:
-            self.settings.flank_5 = int(self.settings.flank_5)
-        except ValueError as e:
-            raise ArgumentError("flank_5 must be a valid integer.") from e
+    #     # Validate and re-assign flanks
+    #     # Attempt to convert flank_5 to integer
+    #     try:
+    #         self.settings.flank_5 = int(self.settings.flank_5)
+    #     except ValueError as e:
+    #         raise ArgumentError("flank_5 must be a valid integer.") from e
 
-        # Attempt to convert flank_3 to integer
-        try:
-            self.settings.flank_3 = int(self.settings.flank_3)
-        except ValueError as e:
-            raise ArgumentError("flank_3 must be a valid integer.") from e
+    #     # Attempt to convert flank_3 to integer
+    #     try:
+    #         self.settings.flank_3 = int(self.settings.flank_3)
+    #     except ValueError as e:
+    #         raise ArgumentError("flank_3 must be a valid integer.") from e
 
-        # Define minimum and maximum values for flank_5 and flank_3
-        MIN_FLANK_5 = 0       # Example minimum value for flank_5
-        MAX_FLANK_5 = 100     # Example maximum value for flank_5
-        MIN_FLANK_3 = 0       # Example minimum value for flank_3
-        MAX_FLANK_3 = 100     # Example maximum value for flank_3
+    #     # Define minimum and maximum values for flank_5 and flank_3
+    #     MIN_FLANK_5 = 0       # Example minimum value for flank_5
+    #     MAX_FLANK_5 = 100     # Example maximum value for flank_5
+    #     MIN_FLANK_3 = 0       # Example minimum value for flank_3
+    #     MAX_FLANK_3 = 100     # Example maximum value for flank_3
 
-        # Check if both flanks are negative
-        if flank_5 < 0 and flank_3 < 0:
-            raise ArgumentError("Expected an even number of integers for flank pairs.")
+    #     # Check if both flanks are negative
+    #     if flank_5 < 0 and flank_3 < 0:
+    #         raise ArgumentError("Expected an even number of integers for flank pairs.")
 
-        # Validate flank_5 within its range
-        if not (MIN_FLANK_5 <= flank_5 <= MAX_FLANK_5):
-            raise ArgumentError(
-                f"Invalid flank_5 value: {flank_5}. "
-                f"Expected a value between {MIN_FLANK_5} and {MAX_FLANK_5}."
-            )
+    #     # Validate flank_5 within its range
+    #     if not (MIN_FLANK_5 <= flank_5 <= MAX_FLANK_5):
+    #         raise ArgumentError(
+    #             f"Invalid flank_5 value: {flank_5}. "
+    #             f"Expected a value between {MIN_FLANK_5} and {MAX_FLANK_5}."
+    #         )
 
-        # Validate flank_3 within its range
-        if not (MIN_FLANK_3 <= flank_3 <= MAX_FLANK_3):
-            raise ArgumentError(
-                f"Invalid flank_3 value: {flank_3}. "
-                f"Expected a value between {MIN_FLANK_3} and {MAX_FLANK_3}."
-            )
+    #     # Validate flank_3 within its range
+    #     if not (MIN_FLANK_3 <= flank_3 <= MAX_FLANK_3):
+    #         raise ArgumentError(
+    #             f"Invalid flank_3 value: {flank_3}. "
+    #             f"Expected a value between {MIN_FLANK_3} and {MAX_FLANK_3}."
+    #         )
 
-        # Assign the validated values back to settings
-        self.settings.flank_5 = flank_5
-        self.settings.flank_3 = flank_3
+    #     # Assign the validated values back to settings
+    #     self.settings.flank_5 = flank_5
+    #     self.settings.flank_3 = flank_3
 
     def setup_logging(self):
         log_level = self.settings.get('log_level', 'INFO').upper()
@@ -675,13 +686,21 @@ class MaraPreprocessingApp:
     def run(self):
         logging.info("Starting MARA Preprocessing Application")
         logging.info("Settings:")
+        
         for key, value in self.settings.items():
             logging.info(f"  {key}: {value}")
 
         stage = self.settings['stage']
+        custom_motifs = self.settings.get('custom_motifs', False)
 
         if stage == 'download_data' or stage == 'all':
-            self.download_data()
+            if not custom_motifs:
+                self.download_data()
+                self.prepare_motif_files() # TODO maybe remove motif preparation after dta downloading
+            else:
+                logging.info("Custom motifs flag is set. Skipping data download.")
+                # Ensure motif files are prepared if not downloading data
+                self.prepare_motif_files()
 
         if stage == 'preprocess' or stage == 'all':
             self.preprocess()
@@ -696,6 +715,99 @@ class MaraPreprocessingApp:
             self.motif_analysis()
 
         logging.info("MARA Preprocessing Application finished successfully")
+
+    def prepare_motif_files(self):
+        """Prepare motif files by generating missing PWM and thresholds if necessary."""
+        logging.info("Preparing motif files")
+
+        motif_dir = self.settings['motif_dir']
+        pwm_dir = os.path.join(motif_dir, 'pwm')
+        pcm_dir = os.path.join(motif_dir, 'pcm')
+        pfm_dir = os.path.join(motif_dir, 'pfm')
+        thresholds_dir = os.path.join(motif_dir, 'thresholds')
+
+        # Ensure directories exist
+        os.makedirs(pwm_dir, exist_ok=True)
+        os.makedirs(pcm_dir, exist_ok=True)
+        os.makedirs(pfm_dir, exist_ok=True)
+        os.makedirs(thresholds_dir, exist_ok=True)
+
+        # Collect motif names from pcm_dir and pfm_dir
+        motif_names = set()
+        if os.path.exists(pcm_dir):
+            pcm_files = [f for f in os.listdir(pcm_dir) if f.endswith('.pcm')]
+            motif_names.update([os.path.splitext(f)[0] for f in pcm_files])
+        if os.path.exists(pfm_dir):
+            pfm_files = [f for f in os.listdir(pfm_dir) if f.endswith('.pfm')]
+            motif_names.update([os.path.splitext(f)[0] for f in pfm_files])
+        if os.path.exists(pwm_dir):
+            pwm_files = [f for f in os.listdir(pwm_dir) if f.endswith('.pwm')]
+            motif_names.update([os.path.splitext(f)[0] for f in pwm_files])
+
+        if not motif_names:
+            logging.error("No motif files found in motif_dir")
+            raise FileNotFoundError("No motif files found in motif_dir")
+
+        # For each motif, check if PWM and threshold files exist
+        for motif_name in motif_names:
+            pwm_file = os.path.join(pwm_dir, f"{motif_name}.pwm")
+            if not os.path.exists(pwm_file):
+                # Try to generate PWM file from PCM or PFM
+                logging.info(f"Generating PWM for motif {motif_name}")
+                pcm_file = os.path.join(pcm_dir, f"{motif_name}.pcm")
+                pfm_file = os.path.join(pfm_dir, f"{motif_name}.pfm")
+                if os.path.exists(pcm_file):
+                    # Use PCM file to generate PWM
+                    converter = PwmConverter(pcm_file)
+                    pwm_model = converter.to_pwm()
+                    pwm_content = converter.matrix_as_string(pwm_model)
+                    # Save PWM file
+                    with open(pwm_file, 'w') as f:
+                        f.write(pwm_content)
+                elif os.path.exists(pfm_file):
+                    # Use PFM file to generate PWM
+                    converter = PwmConverter(pfm_file)
+                    pwm_model = converter.to_pwm()
+                    pwm_content = converter.matrix_as_string(pwm_model)
+                    # Save PWM file
+                    with open(pwm_file, 'w') as f:
+                        f.write(pwm_content)
+                else:
+                    logging.error(f"No PCM or PFM file found for motif {motif_name}")
+                    continue
+            else:
+                logging.info(f"PWM file for motif {motif_name} already exists")
+
+            # Now check if threshold file exists
+            threshold_file = os.path.join(thresholds_dir, f"{motif_name}.threshold")
+            if not os.path.exists(threshold_file):
+                # Generate threshold file from PWM
+                logging.info(f"Generating threshold for motif {motif_name}")
+                if os.path.exists(pwm_file):
+                    # Read PWM file
+                    converter = PwmConverter(pwm_file)
+                    pwm_model = converter.to_pwm()
+                    pwm_matrix = pwm_model['matrix']
+                    # Generate threshold p-value table
+                    threshold_table = ThresholdPValueTable()
+                    # Initialize threshold_table with parameters
+                    min_score = threshold_table.get_worst_score(pwm_matrix)
+                    max_score = threshold_table.get_best_score(pwm_matrix)
+                    score_factor = 1.0
+                    granularity = 2  # Example value; adjust as needed
+                    threshold_table.init(min_score, max_score, score_factor, granularity)
+                    # Generate threshold p-value table
+                    threshold_pvalue_table = threshold_table.get_threshold_pvalue_table(pwm_matrix)
+                    # Save threshold table to file
+                    with open(threshold_file, 'w') as f:
+                        for score, pvalue in threshold_pvalue_table:
+                            f.write(f"{score}\t{pvalue}\n")
+                else:
+                    logging.error(f"PWM file not found for motif {motif_name}")
+                    continue
+            else:
+                logging.info(f"Threshold file for motif {motif_name} already exists")
+        logging.info("Motif files preparation completed")
 
     def download_data(self):
         """Stage 00: Download required files."""
@@ -745,7 +857,7 @@ class MaraPreprocessingApp:
                 unpacked_name = file_name[10:-7]  # removes 'H12INVIVO_' and '.tar.gz'
                 unpacked_path = os.path.join(motif_dir, unpacked_name)
 
-                if not os.path.exists(file_path) and not os.path.exists(unpacked_path):
+                if not os.path.exists(unpacked_path):
                     url = f"{hocomoco_invivo}/{file_name}"
                     try:
                         self.run_command(f"wget -P {motif_dir} {url}")
@@ -758,10 +870,8 @@ class MaraPreprocessingApp:
                     except CommandExecutionError as e:
                         logging.error(f"Error downloading or extracting motif file {file_name}: {e}")
                         raise e
-                elif os.path.exists(unpacked_path):
-                    logging.info(f"Directory {unpacked_path} already exists. Skipping download and extraction.")
                 else:
-                    logging.info(f"Archive {file_path} already exists. Skipping download.")
+                    logging.info(f"Directory {unpacked_path} already exists. Skipping download and extraction.")
             else:
                 if not os.path.exists(file_path):
                     url = f"{hocomoco_invivo}/{file_name}"
