@@ -13,8 +13,6 @@ import math
 # All available parameters
 USER_INPUT = {
     'tss_clusters_file',
-    'bed_chunk', # TODO Remove chunk parallelisation
-    'fasta_chunk' # Remove chunk parallelisation
 }
 
 REQUIRED_DATA = {
@@ -33,7 +31,6 @@ OPTIONAL_PARAMETERS = {
     'num_processes',
     'log_level',
     'stage',
-    'chunk_id', # Remove chunk parallelisation
 }
 
 AVAILABLE_FLANK_PAIRS = {
@@ -478,11 +475,6 @@ class SettingsValidator:
         self.settings = settings
 
     def validate_settings(self):
-        # TODO Replace with constants
-        USER_INPUT: set[str] = {"input_file", "output_file"}
-        REQUIRED_DATA: set[str] = {"reference_genome"}
-        REQUIRED_PARAMETERS: set[str] = {"flank_5", "flank_3", "scoring_mode"}
-
         all_required_keys = USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS
 
         # Step 1: Check for missing required parameters
@@ -918,23 +910,24 @@ class MaraPreprocessingApp:
         logging.info("Stage 01 completed successfully")
 
     def flanking_regions(self):
-        """Stage 02: Generate flanking regions for a BED file chunk."""
+        """Stage 02: Generate flanking regions for the input BED file."""
         logging.info("Starting Stage 02: Generate flanking regions")
-
-        bed_chunk = self.settings['bed_chunk']
-        chunk_id = self.settings['chunk_id']
+    
+        tss_clusters_file = os.path.join(self.stage_dirs['stage_01'], 'tss_clusters_preprocessed.bed')
         flank_5 = self.settings.get('flank_5')
         flank_3 = self.settings.get('flank_3')
         output_dir = self.stage_dirs['stage_02']
-        output_prefix = os.path.join(output_dir, f'chunk_{chunk_id}')
-
-        if not bed_chunk or flank_5 is None or flank_3 is None or chunk_id is None:
-            raise ArgumentError("bed_chunk, flank_5, flank_3, and chunk_id must be provided for flanking_regions stage")
-
-
-        self.make_flanks(flank_5, flank_3, bed_chunk, output_prefix)
-
-        logging.info(f"Stage 02 completed successfully for chunk {chunk_id}")
+        output_prefix = os.path.join(output_dir, 'flanks')
+    
+        if not tss_clusters_file or flank_5 is None or flank_3 is None:
+            raise ArgumentError("tss_clusters_file, flank_5, and flank_3 must be provided for flanking_regions stage")
+    
+        if not os.path.exists(tss_clusters_file):
+            raise ArgumentError(f"TSS clusters file {tss_clusters_file} does not exist. Please run preprocess stage first.")
+    
+        self.make_flanks(flank_5, flank_3, tss_clusters_file, output_prefix)
+    
+        logging.info("Stage 02 completed successfully")
 
     def make_flanks(self, flank_5, flank_3, input_file, output_prefix):
         """Utility function to create flanking regions."""
@@ -987,67 +980,65 @@ class MaraPreprocessingApp:
             yield "\t".join(map(str, info))
 
     def extract_fasta(self):
-        """Stage 03: Extract FASTA sequences for a BED file chunk."""
+        """Stage 03: Extract FASTA sequences for the flanks BED file."""
         logging.info("Starting Stage 03: Extract FASTA sequences")
-
-        bed_chunk = self.settings['bed_chunk']
-        chunk_id = self.settings['chunk_id']
+    
+        flanks_bed = os.path.join(self.stage_dirs['stage_02'], 'flanks_flanks.bed')
         genome_file = self.settings['genome_file']
         output_dir = self.stage_dirs['stage_03']
-        output_fasta = os.path.join(output_dir, f'chunk_{chunk_id}_sequences.fa')
-
-        if not bed_chunk or chunk_id is None:
-            raise ArgumentError("bed_chunk and chunk_id must be provided for extract_fasta stage")
-
+        output_fasta = os.path.join(output_dir, 'sequences.fa')
+    
+        if not os.path.exists(flanks_bed):
+            raise ArgumentError(f"Flanks BED file {flanks_bed} does not exist. Please run flanking_regions stage first.")
+    
         if os.path.exists(output_fasta):
             logging.info(f"FASTA file {output_fasta} already exists. Skipping.")
             return
-
+    
         try:
-            self.run_command(f'bedtools getfasta -bed {bed_chunk} -fi {genome_file} -name+ -s > {output_fasta}')
+            self.run_command(f'bedtools getfasta -bed {flanks_bed} -fi {genome_file} -name+ -s > {output_fasta}')
             logging.info(f"Extracted FASTA sequences to {output_fasta}")
         except CommandExecutionError as e:
             logging.error(f"Error extracting FASTA sequences: {e}")
             raise e
-
-        logging.info(f"Stage 03 completed successfully for chunk {chunk_id}")
+    
+        logging.info("Stage 03 completed successfully")
 
     def motif_analysis(self):
-        """Stage 04: Perform motif occupancy analysis on a FASTA file chunk."""
+        """Stage 04: Perform motif occupancy analysis on the extracted FASTA sequences."""
         logging.info("Starting Stage 04: Perform motif occupancy analysis")
-
-        scoring_mode = self.settings.scoring_mode
-        fasta_chunk = self.settings['fasta_chunk']
-        chunk_id = self.settings['chunk_id']
+    
+        scoring_mode = self.settings['scoring_mode']
+        fasta_file = os.path.join(self.stage_dirs['stage_03'], 'sequences.fa')
         sarus_jar = 'app/sarus-2.1.0.jar'
         motifs_dir = self.settings['motif_dir']
         output_dir = self.stage_dirs['stage_04']
-        sarus_out = os.path.join(output_dir, f'chunk_{chunk_id}_motif_occupancies')
+        sarus_out = os.path.join(output_dir, 'motif_occupancies')
         sarus_out_scores = f"{sarus_out}.scoresFasta"
         output_tsv = f"{sarus_out}.tsv"
-
-        if not fasta_chunk or chunk_id is None:
-            raise ArgumentError("fasta_chunk and chunk_id must be provided for motif_analysis stage")
-
+    
+        if not os.path.exists(fasta_file):
+            raise ArgumentError(f"FASTA file {fasta_file} does not exist. Please run extract_fasta stage first.")
+    
         if os.path.exists(output_tsv):
             logging.info(f"Motif occupancy file {output_tsv} already exists. Skipping.")
             return
-
+    
         try:
             # Run SARUS for motif occupancy analysis
-            self.run_command(f'java -jar {sarus_jar} --pwm {motifs_dir}/pwm --threshold {motifs_dir}/thresholds {scoring_mode} --out {sarus_out} --fasta {fasta_chunk}')
-
+            self.run_command(f'java -jar {sarus_jar} --pwm {motifs_dir}/pwm --threshold {motifs_dir}/thresholds {scoring_mode} --out {sarus_out} --fasta {fasta_file}')
+    
             # Convert SARUS output to TSV format
             self.convert_sarus_scores_to_tsv(sarus_out_scores, output_tsv)
-
-            logging.info(f"Motif occupancy analysis completed for {fasta_chunk}")
-
+    
+            logging.info(f"Motif occupancy analysis completed for {fasta_file}")
+    
         except CommandExecutionError as e:
-            logging.error(f"Error during motif occupancy analysis for {fasta_chunk}: {e}")
+            logging.error(f"Error during motif occupancy analysis for {fasta_file}: {e}")
             raise e
-
+    
         logging.info("Stage 04 completed successfully")
-
+    
     def convert_sarus_scores_to_tsv(self, scores_fasta_file, output_tsv_file):
         """Converts SARUS scores from FASTA format to TSV format."""
         # Define the regular expression pattern
