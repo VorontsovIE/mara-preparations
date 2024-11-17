@@ -1,5 +1,16 @@
 stages/
+work/
+.vscode/
+.nextflow/
+.nextflow.log*
 sarus*.jar
 __pycache__
 app/__pycache__
 *test_*py
+*.pcm
+*.pfm
+*.pwm
+*.thr
+*.jsonl
+*.fa
+*.fasta

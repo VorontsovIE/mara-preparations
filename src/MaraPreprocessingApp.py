@@ -9,13 +9,14 @@ import shutil
 import logging
 import math
 
+BASE_DIR = os.getcwd()
 
 # All available parameters
 USER_INPUT = {
     'tss_clusters_file',
 }
 
-REQUIRED_DATA = {
+SOURCE_DATA = {
     'genome_file',
     'motif_dir'
 }
@@ -31,6 +32,7 @@ OPTIONAL_PARAMETERS = {
     'num_processes',
     'log_level',
     'stage',
+    'motif'
 }
 
 AVAILABLE_FLANK_PAIRS = {
@@ -45,7 +47,7 @@ AVAILABLE_FLANK_PAIRS = {
 }
 
 
-ALL_PARAMETERS = USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS | OPTIONAL_PARAMETERS
+ALL_PARAMETERS = USER_INPUT | SOURCE_DATA | REQUIRED_PARAMETERS | OPTIONAL_PARAMETERS
 
 
 class ConfigError(Exception):
@@ -422,7 +424,7 @@ class Config:
             raise ConfigError(f"Error decoding JSON from {self.config_file}.")
 
     def validate_config(self):
-        for param in USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS:
+        for param in USER_INPUT | SOURCE_DATA | REQUIRED_PARAMETERS:
             if param not in self.data:
                 raise ConfigError(f"Missing required configuration key: {param}")
 
@@ -446,7 +448,7 @@ class ArgParser:
             default='./config.json',
             help='Path to the config JSON file')
 
-        for param in USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS | OPTIONAL_PARAMETERS:
+        for param in USER_INPUT | SOURCE_DATA | REQUIRED_PARAMETERS | OPTIONAL_PARAMETERS:
             if param == 'custom_motifs':
                 self.parser.add_argument(
                     '--custom_motifs',
@@ -475,13 +477,13 @@ class SettingsValidator:
         self.settings = settings
 
     def validate_settings(self):
-        all_required_keys = USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS
+        all_required_keys = USER_INPUT | SOURCE_DATA | REQUIRED_PARAMETERS
 
         # Step 1: Check for missing required parameters
         self._check_required_parameters(all_required_keys)
 
         # Step 2: Validate that required files exist
-        self._validate_files_exist(USER_INPUT | REQUIRED_DATA)
+        self._validate_files_exist(USER_INPUT)
 
         # Step 3: Validate scoring_mode
         self._validate_scoring_mode()
@@ -490,11 +492,11 @@ class SettingsValidator:
         self._validate_flanks()
 
     def get_flanks(self): # TODO Maybe transform into cast_settings later
-        return {'flank_5': self.settings.flank_5, 'flank_3': self.settings.flank_3}
+        return {'flank_5': self.settings['flank_5'], 'flank_3': self.settings['flank_3']}
 
     def _check_required_parameters(self, required_keys: set[str]):
         missing_keys = [key for key in required_keys
-                        if key not in self.settings or self.settings[key] is None]
+                        if key not in self.settings.keys() or self.settings[key] is None]
         if missing_keys:
             missing = ', '.join(missing_keys)
             raise ArgumentError(f"Missing required parameter(s): {missing}")
@@ -512,31 +514,32 @@ class SettingsValidator:
                 for key in non_existent_files
             ]
             error_message = "; ".join(errors)
-            raise ArgumentError(error_message)
+            # raise ArgumentError(error_message) # TODO Create validation stage
 
     def _validate_scoring_mode(self):
-        valid_modes = {'besthit', 'pfm-sum-occupancy'}
+        valid_modes = {'besthit', 'pfm-sum-occupancy', 'custom-thresholds'}
         scoring_mode = self.settings.get('scoring_mode')
-        if scoring_mode not in valid_modes and not scoring_mode.isnumeric():
+        if scoring_mode not in valid_modes and not scoring_mode:
             raise ArgumentError(f"Invalid scoring mode: {scoring_mode}. "
-                                f"Expected p-value or one of folowing: {', '.join(valid_modes)}.")
+                                f"Expected one mode of the folowing: {', '.join(valid_modes)}.")
 
     def _validate_flanks(self):
-        try:
-            abs_flank_5 = int(self.settings.flank_5[:-1])
-            abs_flank_3 = int(self.settings.flank_3[:-1])
+        flank_pairs_text = '\n'.join([pair for pair in AVAILABLE_FLANK_PAIRS])
 
-            letter_flank_5 = self.settings.flank_5[:-1]
-            letter_flank_3 = self.settings.flank_3[:-1]
+        try:
+            abs_flank_5 = int(self.settings['flank_5'][:-1])
+            abs_flank_3 = int(self.settings['flank_3'][:-1])
+
+            letter_flank_5 = self.settings['flank_5'][-1]
+            letter_flank_3 = self.settings['flank_3'][-1]
 
             if not {letter_flank_5, letter_flank_5}.issubset({'u', 'd'}):
                 raise ArgumentError(f'Flank pairs must be one of the following:\n{flank_pairs_text}')
 
-            self.settings.flank_5 = flank_5 = -1 * abs_flank_5 if letter_flank_5 == 'u' else abs_flank_5
-            self.settings.flank_3 = flank_3 = -1 * abs_flank_3 if letter_flank_3 == 'u' else abs_flank_3
+            self.settings['flank_5'] = flank_5 = -1 * abs_flank_5 if letter_flank_5 == 'u' else abs_flank_5
+            self.settings['flank_3'] = flank_3 = -1 * abs_flank_3 if letter_flank_3 == 'u' else abs_flank_3
 
         except (ValueError, IndexError):
-            flank_pairs_text = '\n'.join([pair for pair in AVAILABLE_FLANK_PAIRS])
             raise ArgumentError(f'Flank pairs must be one of the following:\n{flank_pairs_text}')
 
 
@@ -552,9 +555,10 @@ class MaraPreprocessingApp:
         self.config = config
         self.args = args
         self.settings = self.merge_settings()
+        # self.settings = args # From main.nf
         self.validate_settings()
         self.setup_logging()
-        self.check_executables()
+        # self.check_executables()
         self.define_directories()
         self.create_directories()
         self.define_output_prefixes()
@@ -576,26 +580,31 @@ class MaraPreprocessingApp:
         settings['scoring_mode'] = settings.get('scoring_mode', 'besthit').lower()
         settings['stage'] = settings.get('stage', 'all')
         settings['custom_motifs'] = settings.get('custom_motifs', False)
-        
+
         if isinstance(settings['custom_motifs'], str):
             settings['custom_motifs'] = settings['custom_motifs'].lower() == 'true'
+
+        # Prepend BASE_DIR to relevant paths
+        for key in USER_INPUT.union(SOURCE_DATA):
+            if key in settings:
+                settings[key] = os.path.join(BASE_DIR, settings[key])
 
         return settings
 
     def validate_settings(self):
         validator = SettingsValidator(self.settings)
         validator.validate_settings()
-        self.settings.flank_5 = validator.settings.flank_5
-        self.settings.flank_3 = validator.settings.flank_3
+        self.settings['flank_5'] = validator.settings['flank_5']
+        self.settings['flank_3'] = validator.settings['flank_3']
 
     # def validate_settings(self):
     #     # Check required parameters
-    #     for key in USER_INPUT | REQUIRED_DATA | REQUIRED_PARAMETERS:
+    #     for key in USER_INPUT | SOURCE_DATA | REQUIRED_PARAMETERS:
     #         if key not in self.settings or self.settings[key] is None:
     #             raise ArgumentError(f"Missing required parameter: {key}")
 
     #     # Validate files exist
-    #     for key in USER_INPUT | REQUIRED_DATA:
+    #     for key in USER_INPUT | SOURCE_DATA:
     #         if key in self.settings and self.settings[key] != 'Unknown' and not os.path.exists(self.settings[key]):
     #             raise ArgumentError(
     #                 f"No such file or directory for {key.replace('_', ' ')}: {self.settings[key]}"
@@ -606,13 +615,13 @@ class MaraPreprocessingApp:
     #     # Validate and re-assign flanks
     #     # Attempt to convert flank_5 to integer
     #     try:
-    #         self.settings.flank_5 = int(self.settings.flank_5)
+    #         self.settings['flank_5'] = int(self.settings.flank_5)
     #     except ValueError as e:
     #         raise ArgumentError("flank_5 must be a valid integer.") from e
 
     #     # Attempt to convert flank_3 to integer
     #     try:
-    #         self.settings.flank_3 = int(self.settings.flank_3)
+    #         self.settings['flank_3'] = int(self.settings.flank_3)
     #     except ValueError as e:
     #         raise ArgumentError("flank_3 must be a valid integer.") from e
 
@@ -641,8 +650,8 @@ class MaraPreprocessingApp:
     #         )
 
     #     # Assign the validated values back to settings
-    #     self.settings.flank_5 = flank_5
-    #     self.settings.flank_3 = flank_3
+    #     self.settings['flank_5'] = flank_5
+    #     self.settings['flank_3'] = flank_3
 
     def setup_logging(self):
         log_level = self.settings.get('log_level', 'INFO').upper()
@@ -658,11 +667,11 @@ class MaraPreprocessingApp:
     def define_directories(self):
         self.base_dir = os.getcwd()
         self.stage_dirs = {
-            'stage_00': os.path.join(self.base_dir, 'stages', 'stage_00'),
-            'stage_01': os.path.join(self.base_dir, 'stages', 'stage_01'),
-            'stage_02': os.path.join(self.base_dir, 'stages', 'stage_02'),
-            'stage_03': os.path.join(self.base_dir, 'stages', 'stage_03'),
-            'stage_04': os.path.join(self.base_dir, 'stages', 'stage_04')
+            'stage_00': os.path.join(BASE_DIR, 'source_data'),
+            'stage_01': os.path.join(BASE_DIR, 'stages', 'stage_01'),
+            'stage_02': os.path.join(BASE_DIR, 'stages', 'stage_02'),
+            'stage_03': os.path.join(BASE_DIR, 'stages', 'stage_03'),
+            'stage_04': os.path.join(BASE_DIR, 'stages', 'stage_04')
         }
 
     def create_directories(self):
@@ -678,7 +687,7 @@ class MaraPreprocessingApp:
     def run(self):
         logging.info("Starting MARA Preprocessing Application")
         logging.info("Settings:")
-        
+
         for key, value in self.settings.items():
             logging.info(f"  {key}: {value}")
 
@@ -688,7 +697,7 @@ class MaraPreprocessingApp:
         if stage == 'download_data' or stage == 'all':
             if not custom_motifs:
                 self.download_data()
-                self.prepare_motif_files() # TODO maybe remove motif preparation after dta downloading
+                # self.prepare_motif_files() # TODO maybe remove motif preparation after data downloading
             else:
                 logging.info("Custom motifs flag is set. Skipping data download.")
                 # Ensure motif files are prepared if not downloading data
@@ -912,26 +921,26 @@ class MaraPreprocessingApp:
     def flanking_regions(self):
         """Stage 02: Generate flanking regions for the input BED file."""
         logging.info("Starting Stage 02: Generate flanking regions")
-    
+
         tss_clusters_file = os.path.join(self.stage_dirs['stage_01'], 'tss_clusters_preprocessed.bed')
         flank_5 = self.settings.get('flank_5')
         flank_3 = self.settings.get('flank_3')
         output_dir = self.stage_dirs['stage_02']
         output_prefix = os.path.join(output_dir, 'flanks')
-    
+
         if not tss_clusters_file or flank_5 is None or flank_3 is None:
             raise ArgumentError("tss_clusters_file, flank_5, and flank_3 must be provided for flanking_regions stage")
-    
+
         if not os.path.exists(tss_clusters_file):
             raise ArgumentError(f"TSS clusters file {tss_clusters_file} does not exist. Please run preprocess stage first.")
-    
+
         self.make_flanks(flank_5, flank_3, tss_clusters_file, output_prefix)
-    
+
         logging.info("Stage 02 completed successfully")
 
     def make_flanks(self, flank_5, flank_3, input_file, output_prefix):
         """Utility function to create flanking regions."""
-        output_file = f"{output_prefix}_flanks.bed"
+        output_file = f"{output_prefix}.bed"
 
         if os.path.exists(output_file):
             logging.info(f"Flanking regions file {output_file} already exists. Skipping.")
@@ -947,7 +956,7 @@ class MaraPreprocessingApp:
             raise e
 
     def process_bed_file(self, flank_5, flank_3, infile):
-        """Processes a BED file based on flanking distances and scoring mode."""
+        """Processes a BED file based on flanking distances."""
         lines = infile.readlines()
         regions = [self.parse_line(line) for line in lines if not line.startswith('#')]
 
@@ -982,63 +991,90 @@ class MaraPreprocessingApp:
     def extract_fasta(self):
         """Stage 03: Extract FASTA sequences for the flanks BED file."""
         logging.info("Starting Stage 03: Extract FASTA sequences")
-    
-        flanks_bed = os.path.join(self.stage_dirs['stage_02'], 'flanks_flanks.bed')
+
+        flanks_bed = os.path.join(self.stage_dirs['stage_02'], 'flanks.bed')
         genome_file = self.settings['genome_file']
         output_dir = self.stage_dirs['stage_03']
         output_fasta = os.path.join(output_dir, 'sequences.fa')
-    
+
         if not os.path.exists(flanks_bed):
             raise ArgumentError(f"Flanks BED file {flanks_bed} does not exist. Please run flanking_regions stage first.")
-    
+
         if os.path.exists(output_fasta):
             logging.info(f"FASTA file {output_fasta} already exists. Skipping.")
             return
-    
+
         try:
             self.run_command(f'bedtools getfasta -bed {flanks_bed} -fi {genome_file} -name+ -s > {output_fasta}')
             logging.info(f"Extracted FASTA sequences to {output_fasta}")
+            # self.run_command(f'bedtools getfasta -bed {flanks_bed} -fi {genome_file} -name+ -s')
+            # raise CommandExecutionError
         except CommandExecutionError as e:
             logging.error(f"Error extracting FASTA sequences: {e}")
             raise e
-    
+
         logging.info("Stage 03 completed successfully")
 
     def motif_analysis(self):
         """Stage 04: Perform motif occupancy analysis on the extracted FASTA sequences."""
         logging.info("Starting Stage 04: Perform motif occupancy analysis")
-    
+
         scoring_mode = self.settings['scoring_mode']
         fasta_file = os.path.join(self.stage_dirs['stage_03'], 'sequences.fa')
-        sarus_jar = 'app/sarus-2.1.0.jar'
+        sarus_jar = 'src/sarus-2.1.0.jar'
         motifs_dir = self.settings['motif_dir']
+        motif = self.settings.get('motif')
         output_dir = self.stage_dirs['stage_04']
-        sarus_out = os.path.join(output_dir, 'motif_occupancies')
-        sarus_out_scores = f"{sarus_out}.scoresFasta"
-        output_tsv = f"{sarus_out}.tsv"
-    
+        
+        # if motif:
+        #     logging.info(f'Processing motif: {motif}')
+        #     pwm_file = os.path.join(motifs_dir, 'pwm', f'{motif}.pwm')
+        #     threshold_file = os.path.join(motifs_dir, 'thresholds', f'{motif}.thr')
+        #     sarus_out = os.path.join(output_dir, f'{motif}_occupancies')
+        # else:
+        #     logging.info("Processing all motifs")
+        #     pwm_file = os.path.join(motifs_dir, 'pwm')
+        #     threshold_file = os.path.join(motifs_dir, 'thresholds')
+        #     sarus_out = os.path.join(output_dir, 'motif_occupancies')
+
+        logging.info(f'Processing motif: {motif}')
+        pwm_file = os.path.join(motifs_dir, 'pwm', f'{motif}.pwm')
+        threshold_file = os.path.join(motifs_dir, 'thresholds', f'{motif}.thr')
+
+        output_prefix = os.path.join(output_dir, f'{motif}_occupancies')
+        sarus_out = f'{output_prefix}.fasta'
+        output_tsv = f"{output_prefix}.tsv"
+
         if not os.path.exists(fasta_file):
             raise ArgumentError(f"FASTA file {fasta_file} does not exist. Please run extract_fasta stage first.")
-    
+
         if os.path.exists(output_tsv):
             logging.info(f"Motif occupancy file {output_tsv} already exists. Skipping.")
             return
-    
+
         try:
-            # Run SARUS for motif occupancy analysis
-            self.run_command(f'java -jar {sarus_jar} --pwm {motifs_dir}/pwm --threshold {motifs_dir}/thresholds {scoring_mode} --out {sarus_out} --fasta {fasta_file}')
-    
-            # Convert SARUS output to TSV format
-            self.convert_sarus_scores_to_tsv(sarus_out_scores, output_tsv)
-    
-            logging.info(f"Motif occupancy analysis completed for {fasta_file}")
-    
+            # if motif:
+            #     scoring_mode = f'{motifs_dir}/thresholds/{motif}.thr' if scoring_mode == 'custom-thresholds' else scoring_mode
+            #     self.run_command(f'java -cp {sarus_jar} ru.autosome.SARUS {fasta_file} {motifs_dir}/pwm/{motif}.pwm {scoring_mode} > {sarus_out}')
+            #     self.convert_sarus_scores_to_tsv(sarus_out, output_tsv)
+            #     logging.info(f"Motif occupancy analysis completed for motif: {motif}")
+            # else:
+            #     scoring_mode = f'{motifs_dir}/thresholds' if scoring_mode == 'custom-thresholds' else scoring_mode
+            #     self.run_command(f'java -cp {sarus_jar} ru.autosome.SARUS {fasta_file} {motifs_dir}/pwm {scoring_mode} > {sarus_out}')
+            #     self.convert_sarus_scores_to_tsv(sarus_out, output_tsv)
+            #     logging.info(f"Motif occupancy analysis completed for {fasta_file}")
+
+            scoring_mode = f'{motifs_dir}/thresholds/{motif}.thr' if scoring_mode == 'custom-thresholds' else scoring_mode
+            self.run_command(f'java -cp {sarus_jar} ru.autosome.SARUS {fasta_file} {motifs_dir}/pwm/{motif}.pwm {scoring_mode} > {sarus_out}')
+            self.convert_sarus_scores_to_tsv(sarus_out, output_tsv)
+            logging.info(f"Motif occupancy analysis completed for motif: {motif}")
+
         except CommandExecutionError as e:
             logging.error(f"Error during motif occupancy analysis for {fasta_file}: {e}")
             raise e
-    
+
         logging.info("Stage 04 completed successfully")
-    
+
     def convert_sarus_scores_to_tsv(self, scores_fasta_file, output_tsv_file):
         """Converts SARUS scores from FASTA format to TSV format."""
         # Define the regular expression pattern

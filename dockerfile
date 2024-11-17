@@ -1,17 +1,25 @@
 # Use an official Python runtime as a parent image
 FROM python:3.9-slim
 
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
 # Set the working directory in the container
-WORKDIR /app
+WORKDIR /work
 
 # Copy the application code into the container
-COPY app/ /app/app/
-COPY config.json /app/config.json
-COPY data/ /app/data/
-COPY MaraPreprocessingApp.py /app/MaraPreprocessingApp.py
+# COPY src/ /work
+COPY src/MaraPreprocessingApp.py /work/src/
+COPY config.json /work
+COPY source_data/ /work
+COPY tss_clusters.bed /work
 
 # Install required system packages
-RUN apt-get update && apt-get install -y     wget     default-jre     bedtools     && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    wget \
+    default-jre \
+    bedtools \
+    && rm -rf /var/lib/apt/lists/*
 
-# Set the entry point to the application
-ENTRYPOINT [python, app/MaraPreprocessingApp.py]
+# Corrected ENTRYPOINT syntax
+# ENTRYPOINT ["python", "/app/src/MaraPreprocessingApp.py"]

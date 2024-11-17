@@ -1,9 +1,10 @@
 {
-    tss_clusters_file: data/tss_clusters.bed,
-    genome_file: data/genome/hg38.fa,
-    motif_dir: data/motifs,
-    scoring_mode: upstream,
-    flank_pairs: 250 50,
-    num_processes: 4,
-    log_level: INFO
+    "tss_clusters_file": "tss_clusters.bed",
+    "genome_file": "source_data/genome/hg38.fa",
+    "motif_dir": "source_data/motifs",
+    "scoring_mode": "besthit",
+    "flank_5": "250u", 
+    "flank_3": "0d",
+    "num_processes": 4,
+    "log_level": "INFO"
 }
