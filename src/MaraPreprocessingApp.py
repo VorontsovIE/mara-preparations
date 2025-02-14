@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os
 import sys
 import json
@@ -11,7 +10,6 @@ import math
 
 BASE_DIR = os.getcwd()
 
-# All available parameters
 USER_INPUT = {
     'tss_clusters_file',
 }
@@ -167,28 +165,23 @@ class PwmConverter:
         if not lines:
             raise ValueError("Input is empty.")
 
-        # Check if the first line is a header
         if lines[0].startswith('>'):
             header = lines.pop(0)
             self.name = header[1:].strip().split()[0]
         else:
-            # Use the filename as the motif name
             self.name = os.path.splitext(os.path.basename(self.filename))[0]
 
         if not lines:
             raise ValueError("No data found after header.")
 
-        # Now, split the lines into rows
         rows = [line.split() for line in lines if not line.startswith('#') and line]
 
-        # Now check that each row has the expected number of columns
         for idx, row in enumerate(rows):
             if len(row) != self.num_columns:
                 raise ValueError(f"All rows must have exactly {self.num_columns} columns. Error at row {idx + 1}.")
             if not all(self._is_float(x) for x in row):
                 raise ValueError(f"Non-numeric value found in the matrix at row {idx + 1}.")
 
-        # Convert all elements to floats
         self.matrix = [[float(x) for x in row] for row in rows]
 
     def _calculate_pseudocount(self, count):
@@ -283,16 +276,13 @@ class PwmConverter:
             ValueError: If the input format is unknown or unsupported for conversion.
         """
         if self.format == 'pwm':
-            # Input is already PWM
             return {'name': self.name, 'matrix': self.matrix}
         elif self.format == 'pfm':
-            # Convert PFM -> PCM -> PWM
             pfm = {'name': self.name, 'matrix': self.matrix}
             pcm = self._pfm2pcm(pfm)
             pwm = self._pcm2pwm(pcm)
             return pwm
         elif self.format == 'pcm':
-            # Convert PCM -> PWM
             pcm = {'name': self.name, 'matrix': self.matrix}
             pwm = self._pcm2pwm(pcm)
             return pwm
@@ -479,16 +469,9 @@ class SettingsValidator:
     def validate_settings(self):
         all_required_keys = USER_INPUT | SOURCE_DATA | REQUIRED_PARAMETERS
 
-        # Step 1: Check for missing required parameters
         self._check_required_parameters(all_required_keys)
-
-        # Step 2: Validate that required files exist
         self._validate_files_exist(USER_INPUT)
-
-        # Step 3: Validate scoring_mode
         self._validate_scoring_mode()
-
-        # Step 4: Validate and re-assign flanks
         self._validate_flanks()
 
     def get_flanks(self): # TODO Maybe transform into cast_settings later
@@ -566,7 +549,6 @@ class MaraPreprocessingApp:
     def merge_settings(self):
         settings = {}
 
-        # Merge settings from config and command-line arguments
         for param in ALL_PARAMETERS:
             arg_value = getattr(self.args, param, None)
             config_value = self.config.get(param)
@@ -574,7 +556,6 @@ class MaraPreprocessingApp:
             if value is not None:
                 settings[param] = value
 
-        # Set defaults
         settings['log_level'] = settings.get('log_level', 'INFO')
         settings['num_processes'] = settings.get('num_processes', os.cpu_count())
         settings['scoring_mode'] = settings.get('scoring_mode', 'besthit').lower()
@@ -584,7 +565,6 @@ class MaraPreprocessingApp:
         if isinstance(settings['custom_motifs'], str):
             settings['custom_motifs'] = settings['custom_motifs'].lower() == 'true'
 
-        # Prepend BASE_DIR to relevant paths
         for key in USER_INPUT.union(SOURCE_DATA):
             if key in settings:
                 settings[key] = os.path.join(BASE_DIR, settings[key])
@@ -700,7 +680,6 @@ class MaraPreprocessingApp:
                 # self.prepare_motif_files() # TODO maybe remove motif preparation after data downloading
             else:
                 logging.info("Custom motifs flag is set. Skipping data download.")
-                # Ensure motif files are prepared if not downloading data
                 self.prepare_motif_files()
 
         if stage == 'preprocess' or stage == 'all':
@@ -727,13 +706,11 @@ class MaraPreprocessingApp:
         pfm_dir = os.path.join(motif_dir, 'pfm')
         thresholds_dir = os.path.join(motif_dir, 'thresholds')
 
-        # Ensure directories exist
         os.makedirs(pwm_dir, exist_ok=True)
         os.makedirs(pcm_dir, exist_ok=True)
         os.makedirs(pfm_dir, exist_ok=True)
         os.makedirs(thresholds_dir, exist_ok=True)
 
-        # Collect motif names from pcm_dir and pfm_dir
         motif_names = set()
         if os.path.exists(pcm_dir):
             pcm_files = [f for f in os.listdir(pcm_dir) if f.endswith('.pcm')]
@@ -749,28 +726,22 @@ class MaraPreprocessingApp:
             logging.error("No motif files found in motif_dir")
             raise FileNotFoundError("No motif files found in motif_dir")
 
-        # For each motif, check if PWM and threshold files exist
         for motif_name in motif_names:
             pwm_file = os.path.join(pwm_dir, f"{motif_name}.pwm")
             if not os.path.exists(pwm_file):
-                # Try to generate PWM file from PCM or PFM
                 logging.info(f"Generating PWM for motif {motif_name}")
                 pcm_file = os.path.join(pcm_dir, f"{motif_name}.pcm")
                 pfm_file = os.path.join(pfm_dir, f"{motif_name}.pfm")
                 if os.path.exists(pcm_file):
-                    # Use PCM file to generate PWM
                     converter = PwmConverter(pcm_file)
                     pwm_model = converter.to_pwm()
                     pwm_content = converter.matrix_as_string(pwm_model)
-                    # Save PWM file
                     with open(pwm_file, 'w') as f:
                         f.write(pwm_content)
                 elif os.path.exists(pfm_file):
-                    # Use PFM file to generate PWM
                     converter = PwmConverter(pfm_file)
                     pwm_model = converter.to_pwm()
                     pwm_content = converter.matrix_as_string(pwm_model)
-                    # Save PWM file
                     with open(pwm_file, 'w') as f:
                         f.write(pwm_content)
                 else:
@@ -779,27 +750,20 @@ class MaraPreprocessingApp:
             else:
                 logging.info(f"PWM file for motif {motif_name} already exists")
 
-            # Now check if threshold file exists
             threshold_file = os.path.join(thresholds_dir, f"{motif_name}.threshold")
             if not os.path.exists(threshold_file):
-                # Generate threshold file from PWM
                 logging.info(f"Generating threshold for motif {motif_name}")
                 if os.path.exists(pwm_file):
-                    # Read PWM file
                     converter = PwmConverter(pwm_file)
                     pwm_model = converter.to_pwm()
                     pwm_matrix = pwm_model['matrix']
-                    # Generate threshold p-value table
                     threshold_table = ThresholdPValueTable()
-                    # Initialize threshold_table with parameters
                     min_score = threshold_table.get_worst_score(pwm_matrix)
                     max_score = threshold_table.get_best_score(pwm_matrix)
                     score_factor = 1.0
-                    granularity = 2  # Example value; adjust as needed
+                    granularity = 2
                     threshold_table.init(min_score, max_score, score_factor, granularity)
-                    # Generate threshold p-value table
                     threshold_pvalue_table = threshold_table.get_threshold_pvalue_table(pwm_matrix)
-                    # Save threshold table to file
                     with open(threshold_file, 'w') as f:
                         for score, pvalue in threshold_pvalue_table:
                             f.write(f"{score}\t{pvalue}\n")
@@ -826,11 +790,9 @@ class MaraPreprocessingApp:
             "H12INVIVO_thresholds.tar.gz"
         ]
 
-        # Ensure genome directory exists
         genome_dir = os.path.dirname(genome_file)
         os.makedirs(genome_dir, exist_ok=True)
 
-        # Download and extract genome file
         if not os.path.exists(genome_file):
             try:
                 self.run_command(f'wget -P {genome_dir} {genome_address}')
@@ -847,10 +809,8 @@ class MaraPreprocessingApp:
         else:
             logging.info(f"Genome file {genome_file} already exists. Skipping download.")
 
-        # Ensure motif directory exists
         os.makedirs(motif_dir, exist_ok=True)
 
-        # Download and extract motif files
         for file_name in file_names:
             file_path = os.path.join(motif_dir, file_name)
 
@@ -864,7 +824,6 @@ class MaraPreprocessingApp:
                         self.run_command(f"wget -P {motif_dir} {url}")
                         self.run_command(f"tar -zxf {file_path} -C {motif_dir}")
                         logging.info(f"Downloaded and extracted {file_name} to {unpacked_path}")
-                        # Remove the motif archive after extraction
                         if os.path.exists(file_path):
                             os.remove(file_path)
                             logging.info(f"Removed motif archive: {file_path}")
@@ -899,7 +858,6 @@ class MaraPreprocessingApp:
             logging.info(f"Output file {output_bed} already exists. Skipping preprocessing.")
             return
 
-        # Read input BED file and process
         try:
             with open(input_bed, 'r') as infile, open(output_bed, 'w') as outfile:
                 for line in infile:
@@ -1025,7 +983,7 @@ class MaraPreprocessingApp:
         motifs_dir = self.settings['motif_dir']
         motif = self.settings.get('motif')
         output_dir = self.stage_dirs['stage_04']
-        
+
         # if motif:
         #     logging.info(f'Processing motif: {motif}')
         #     pwm_file = os.path.join(motifs_dir, 'pwm', f'{motif}.pwm')
@@ -1077,7 +1035,6 @@ class MaraPreprocessingApp:
 
     def convert_sarus_scores_to_tsv(self, scores_fasta_file, output_tsv_file):
         """Converts SARUS scores from FASTA format to TSV format."""
-        # Define the regular expression pattern
         pattern = re.compile(r"^>(?P<name>.+)::(?P<chr>chr\w+):(?P<from>\d+)-(?P<to>\d+)\((?P<strand>[+-])\)$")
 
         try:

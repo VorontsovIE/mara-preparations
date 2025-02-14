@@ -14,3 +14,5 @@ app/__pycache__
 *.jsonl
 *.fa
 *.fasta
+*.tsv
+i_*

@@ -1,11 +1,6 @@
 nextflow.enable.dsl=2
 
-// reate a channel with the list of motifs
 motifs_ch = Channel.fromPath("${params.motif_dir}/pwm/*.pwm").map { file -> file.baseName }
-// Channel.fromPath("src/MaraPreprocessingApp.py").set{script_ch}
-// Channel.fromPath("config.json").set{config_ch}
-// Channel.fromPath("tss_clusters.bed").set{input_bed_ch} // TODO Make input file paths changeable
-// Channel.fromPath("source_data/genome/hg38.fa").set{genome_ch}
 source_data_ch = Channel.value(file("source_data/"))
 scripts_ch = Channel.value(file("src/"))
 
@@ -17,7 +12,7 @@ process download_data {
     path source_data
 
     output:
-    path 'source_data/*', emit: downloaded_files
+    path 'source_data/*', emit: downloaded_files // TODO Make changeable
 
     script:
     """
@@ -33,7 +28,7 @@ process preprocess_data {
     path downloaded_files
 
     output:
-    path 'stages/', emit: preprocessed_dir
+    path 'stages/', emit: preprocessed_dir // TODO Simplify directory structure
 
     script:
     """
@@ -44,7 +39,6 @@ process preprocess_data {
 process flanking_regions {
     container 'mara-preprocessing-app'
     tag 'flanking_regions'
-    cpus 2
 
     input:
     path preprocessed_dir
@@ -66,7 +60,7 @@ process extract_fasta {
     tag 'extract_fasta'
 
     input:
-    path source_data
+    path genome_file // from '/work/source_data/genome/hg38.fa'
     path flanks_bed
 
     output:
@@ -82,7 +76,7 @@ process extract_fasta {
 process motif_analysis {
     container 'mara-preprocessing-app'
     tag { "${motif}" }
-    cpus 2
+    cpus 4 // TODO Make changeable
 
     input:
     val motif
@@ -121,26 +115,12 @@ process combine_results {
 }
 
 workflow {
-    // Stage 0: Download Data
-    // download_data(config_ch, script_ch, source_data_ch)
     download_data(source_data_ch)
-
-    // Stage 1: Preprocess Data
     preprocess_data(download_data.out.downloaded_files)
-
-    // Stage 2: Generate Flanking Regions
     flanking_regions(preprocess_data.out.preprocessed_dir)
-
-    // Stage 3: Extract FASTA Sequences
     extract_fasta(source_data_ch, flanking_regions.out.flanks_bed)
-
-    // Stage 4: Motif Analysis
     motif_analysis(motifs_ch, scripts_ch, source_data_ch, extract_fasta.out.fasta_files)
-
-    // Collect all motif_analysis outputs
     motif_fasta_list = motif_analysis.out.motif_fasta.collect()
     motif_tsv_list = motif_analysis.out.motif_tsv.collect()
-
-    // Combine all motif results
     combine_results(motif_fasta_list, motif_tsv_list)
 }
