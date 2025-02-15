@@ -1,5 +1,32 @@
 nextflow.enable.dsl=2
 
+import groovy.json.JsonSlurper
+
+// Load and override parameters if config file exists
+def configFile = file(params.config_file)
+
+if (configFile.exists()) {
+    try {
+        def jsonSlurper = new JsonSlurper()
+        def jsonParams = jsonSlurper.parseText(configFile.text)
+
+        params.script_file       = jsonParams.script_file ?: params.script_file
+        params.config_file       = jsonParams.config_file ?: params.config_file
+        params.motif_dir         = jsonParams.motif_dir ?: params.motif_dir
+        params.tss_clusters_file = jsonParams.tss_clusters_file ?: params.tss_clusters_file
+        params.genome_file       = jsonParams.genome_file ?: params.genome_file
+        params.flank_5           = jsonParams.flank_5 ?: params.flank_5
+        params.flank_3           = jsonParams.flank_3 ?: params.flank_3
+
+        println "Loaded parameters from JSON: ${params.config_file}"
+    } catch (Exception e) {
+        println "Error loading JSON config: ${e.message}"
+        exit 1
+    }
+} else {
+    println "Warning: JSON config file not found, using default parameters."
+}
+
 motifs_ch = Channel.fromPath("${params.motif_dir}/pwm/*.pwm").map { file -> file.baseName }
 source_data_ch = Channel.value(file("source_data/"))
 scripts_ch = Channel.value(file("src/"))
@@ -16,7 +43,7 @@ process download_data {
 
     script:
     """
-    python $params.script_file --config $params.config_file --stage download_data
+    python $params.script_file --config /work/$params.config_file --stage download_data
     """
 }
 
@@ -32,7 +59,7 @@ process preprocess_data {
 
     script:
     """
-    python $params.script_file --config $params.config_file --tss_clusters_file $params.tss_clusters_file --stage preprocess
+    python $params.script_file --config /work/$params.config_file --tss_clusters_file /work/$params.tss_clusters_file --stage preprocess
     """
 }
 
@@ -48,7 +75,7 @@ process flanking_regions {
 
     script:
     """
-    python $params.script_file --config $params.config_file \
+    python $params.script_file --config /work/$params.config_file \
         --stage flanking_regions \
         --flank_5 ${params.flank_5} \
         --flank_3 ${params.flank_3}
@@ -69,7 +96,7 @@ process extract_fasta {
     script:
     """
     ls /work
-    python $params.script_file --config $params.config_file --genome_file $params.genome_file --stage extract_fasta
+    python $params.script_file --config /work/$params.config_file --genome_file /work/$params.genome_file --stage extract_fasta
     """
 }
 
@@ -90,7 +117,7 @@ process motif_analysis {
 
     script:
     """
-    python $params.script_file --config $params.config_file \
+    python $params.script_file --config /work/$params.config_file \
         --stage motif_analysis \
         --motif ${motif} \
     """

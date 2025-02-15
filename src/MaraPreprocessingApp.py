@@ -30,7 +30,8 @@ OPTIONAL_PARAMETERS = {
     'num_processes',
     'log_level',
     'stage',
-    'motif'
+    'motif',
+    'docker'
 }
 
 AVAILABLE_FLANK_PAIRS = {
