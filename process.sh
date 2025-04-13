@@ -1,88 +1,13 @@
-make_flanks() {
-  FLANK_5=$1
-  FLANK_3=$2
-  INPUT_FN="$3" # ./stages/stage_01/Credible_TSSclusters_regions.bed
-  OUTPUT_FN_PREFIX="$4" # ./stages/stage_02/TSS_clusters
-  ruby make_flanks.rb ${FLANK_5} ${FLANK_3} ${INPUT_FN} > ${OUTPUT_FN_PREFIX}_${FLANK_5}_${FLANK_3}_around_center.bed
-}
+source ./pipeline_core.sh
 
-flanks_fasta() {
-  FLANK_5=$1
-  FLANK_3=$2
-  INPUT_FN_PREFIX="$3" # ./stages/stage_02/TSS_clusters
-  OUTPUT_FN_PREFIX="$4" # ./stages/stage_03/TSS_clusters
-  bedtools getfasta -bed ${INPUT_FN_PREFIX}_${FLANK_5}_${FLANK_3}_around_center.bed \
-                    -fi source_data/genome/hg38.fa \
-                    -name+ \
-                    -s \
-      > ${OUTPUT_FN_PREFIX}_${FLANK_5}_${FLANK_3}_around_center.fa
-}
-
-motif_occupancies_cmd(){
-  FLANK_5=$1
-  FLANK_3=$2
-  INPUT_FN_PREFIX="$3" # ./stages/stage_03/TSS_clusters
-  OUTPUT_BN_PREFIX="$4" # TSS
-  for MOTIF_FN in $( find source_data/motifs/pfm/ -xtype f -iname '*.pfm' ); do
-      MOTIF_BN=$(basename -s .pfm "${MOTIF_FN}" )
-      echo "java -cp app/sarus.jar ru.autosome.SARUS ${INPUT_FN_PREFIX}_${FLANK_5}_${FLANK_3}_around_center.fa"  \
-              "${MOTIF_FN}" \
-              pfm-sum-occupancy \
-              --pfm-pseudocount 0.0001 \
-              --naive \
-          " | ruby app/convert_sarus_scoresFasta_to_tsv.rb " \
-          " > ./stages/stage_04/occupancy@${MOTIF_BN}@${OUTPUT_BN_PREFIX}_${FLANK_5}_${FLANK_3}.bed "
-  done
-}
-
-motif_besthits_logpval_cmd(){
-  FLANK_5=$1
-  FLANK_3=$2
-  INPUT_FN_PREFIX="$3" # ./stages/stage_03/TSS_clusters
-  OUTPUT_BN_PREFIX="$4" # TSS
-  for MOTIF_FN in $( find source_data/motifs/pwm/ -xtype f -iname '*.pwm' ); do
-      MOTIF_BN=$(basename -s .pwm "${MOTIF_FN}" )
-      echo "java -cp app/sarus.jar ru.autosome.SARUS ${INPUT_FN_PREFIX}_${FLANK_5}_${FLANK_3}_around_center.fa"  \
-              "${MOTIF_FN}" \
-              besthit \
-              --pvalues-file "source_data/motifs/thresholds/${MOTIF_BN}.thr" \
-              --output-scoring-mode logpvalue \
-          " | ruby app/convert_sarus_scoresFasta_to_tsv.rb " \
-          " > ./stages/stage_04/besthit-logpval@${MOTIF_BN}@${OUTPUT_BN_PREFIX}_${FLANK_5}_${FLANK_3}.bed "
-  done
-}
-
-motif_besthits_score_cmd(){
-  FLANK_5=$1
-  FLANK_3=$2
-  INPUT_FN_PREFIX="$3" # ./stages/stage_03/TSS_clusters
-  OUTPUT_BN_PREFIX="$4" # TSS
-  for MOTIF_FN in $( find source_data/motifs/pwm/ -xtype f -iname '*.pwm' ); do
-      MOTIF_BN=$(basename -s .pwm "${MOTIF_FN}" )
-      echo "java -cp app/sarus.jar ru.autosome.SARUS ${INPUT_FN_PREFIX}_${FLANK_5}_${FLANK_3}_around_center.fa"  \
-              "${MOTIF_FN}" \
-              besthit \
-              --output-scoring-mode score \
-          " | ruby app/convert_sarus_scoresFasta_to_tsv.rb " \
-          " > ./stages/stage_04/besthit-score@${MOTIF_BN}@${OUTPUT_BN_PREFIX}_${FLANK_5}_${FLANK_3}.bed "
-  done
-}
-
-motif_besthits_cmd(){
-  FLANK_5=$1
-  FLANK_3=$2
-  INPUT_FN_PREFIX="$3" # ./stages/stage_03/TSS_clusters
-  OUTPUT_BN_PREFIX="$4" # TSS
-  motif_besthits_score_cmd ${FLANK_5} ${FLANK_3} "${INPUT_FN_PREFIX}" "${OUTPUT_BN_PREFIX}"
-  motif_besthits_logpval_cmd ${FLANK_5} ${FLANK_3} "${INPUT_FN_PREFIX}" "${OUTPUT_BN_PREFIX}"
-}
-
-stage_00() {
+stage_00_1() {
   pushd source_data/genome
       wget https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz
       gzip -d hg38.fa.gz
   popd
+}
 
+stage_00_2() {
   pushd source_data/motifs
       wget https://hocomoco12.autosome.org/final_bundle/hocomoco12/H12INVIVO/H12INVIVO_annotation.jsonl
       wget https://hocomoco12.autosome.org/final_bundle/hocomoco12/H12INVIVO/H12INVIVO_pwm.tar.gz
@@ -91,11 +16,19 @@ stage_00() {
       wget https://hocomoco12.autosome.org/final_bundle/hocomoco12/H12INVIVO/H12INVIVO_thresholds.tar.gz
       for FN in $(ls *.tar.gz); do tar -zxf "${FN}"; done
   popd
+}
 
+stage_00_3() {
   pushd app
       wget https://raw.githubusercontent.com/autosome-ru/sarus/master/releases/sarus-2.1.0.jar
       ln -s sarus-2.1.0.jar sarus.jar
   popd
+}
+
+stage_00() {
+  stage_00_1
+  stage_00_2
+  stage_00_3
 }
 
 stage_01() {
@@ -167,50 +100,50 @@ stage_04() {
 
   mkdir -p ./stages/stage_04/
   (
-    motif_occupancies_cmd 250u 50d  ./stages/stage_03/TSS_clusters  TSS
-    motif_occupancies_cmd 400u 100d ./stages/stage_03/TSS_clusters  TSS
-    motif_occupancies_cmd 300u 100d ./stages/stage_03/TSS_clusters  TSS
-    motif_occupancies_cmd 200u 50d  ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_flanks_cmd 250u 50d  ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_flanks_cmd 400u 100d ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_flanks_cmd 300u 100d ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_flanks_cmd 200u 50d  ./stages/stage_03/TSS_clusters  TSS
 
-    motif_occupancies_cmd 250u 50d  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
+    motif_occupancies_flanks_cmd 250u 50d  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
   ) | parallel -j ${NUM_THREADS}
 
   (
-    motif_occupancies_cmd 300u 50d  ./stages/stage_03/TSS_clusters  TSS
-    motif_occupancies_cmd 400u 50d  ./stages/stage_03/TSS_clusters  TSS
-    motif_occupancies_cmd 250u 25d  ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_flanks_cmd 300u 50d  ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_flanks_cmd 400u 50d  ./stages/stage_03/TSS_clusters  TSS
+    motif_occupancies_flanks_cmd 250u 25d  ./stages/stage_03/TSS_clusters  TSS
   ) | parallel -j ${NUM_THREADS}
 
-  motif_besthits_cmd 250u 50d  ./stages/stage_03/TSS_clusters  TSS | parallel -j ${NUM_THREADS}
+  motif_besthits_flanks_cmd 250u 50d  ./stages/stage_03/TSS_clusters  TSS | parallel -j ${NUM_THREADS}
 
   (
-   motif_occupancies_cmd 250u 50d  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
-   motif_besthits_cmd 250u 50d  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
+   motif_occupancies_flanks_cmd 250u 50d  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
+   motif_besthits_flanks_cmd 250u 50d  ./stages/stage_03/hg38_promoters_v1  hg38_promoters_v1
   ) | parallel -j ${NUM_THREADS}
 
-
-  (
-    # upstream
-    motif_occupancies_cmd 250u 0    ./stages/stage_03/TSS_cluster_summit  TSS_summit
-    motif_occupancies_cmd 250u 10d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
-    motif_occupancies_cmd 250u 20d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
-
-    # downstream
-    motif_occupancies_cmd 10u 50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
-    motif_occupancies_cmd 0   50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
-    motif_occupancies_cmd 10d 50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
-  ) | parallel -j ${NUM_THREADS}
 
   (
     # upstream
-    motif_besthits_cmd 250u 0    ./stages/stage_03/TSS_cluster_summit  TSS_summit
-    motif_besthits_cmd 250u 10d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
-    motif_besthits_cmd 250u 20d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_occupancies_flanks_cmd 250u 0    ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_occupancies_flanks_cmd 250u 10d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_occupancies_flanks_cmd 250u 20d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
 
     # downstream
-    motif_besthits_cmd 10u 50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
-    motif_besthits_cmd 0   50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
-    motif_besthits_cmd 10d 50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_occupancies_flanks_cmd 10u 50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_occupancies_flanks_cmd 0   50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_occupancies_flanks_cmd 10d 50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+  ) | parallel -j ${NUM_THREADS}
+
+  (
+    # upstream
+    motif_besthits_flanks_cmd 250u 0    ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_besthits_flanks_cmd 250u 10d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_besthits_flanks_cmd 250u 20d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+
+    # downstream
+    motif_besthits_flanks_cmd 10u 50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_besthits_flanks_cmd 0   50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
+    motif_besthits_flanks_cmd 10d 50d  ./stages/stage_03/TSS_cluster_summit  TSS_summit
   ) | parallel -j ${NUM_THREADS}
 }
 
