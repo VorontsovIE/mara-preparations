@@ -3,7 +3,8 @@ make_flanks() {
   FLANK_3=$2
   INPUT_FN="$3" # ./stages/stage_01/Credible_TSSclusters_regions.bed
   OUTPUT_FN_PREFIX="$4" # ./stages/stage_02/TSS_clusters
-  ruby make_flanks.rb ${FLANK_5} ${FLANK_3} ${INPUT_FN} > ${OUTPUT_FN_PREFIX}_${FLANK_5}_${FLANK_3}_around_center.bed
+  CENTER_COLUMN="${5:-5}" # by default 5-th column but can be 7-th or 10-th
+  ruby make_flanks.rb --center-column ${CENTER_COLUMN} ${FLANK_5} ${FLANK_3} ${INPUT_FN} > ${OUTPUT_FN_PREFIX}_${FLANK_5}_${FLANK_3}_around_center.bed
 }
 
 flanks_fasta() {

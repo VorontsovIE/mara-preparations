@@ -44,12 +44,13 @@ stage_01() {
 
 stage_02() {
   mkdir -p ./stages/stage_02/
+  # 7-th column used for peak summit
+  make_flanks 250u 10d  ./stages/stage_01/hg38_fair+new_CAGE_peaks_phase1and2.bed  ./stages/stage_02/hg38_fair+new_CAGE_peaks_phase1and2  7
 }
 
 stage_03() {
   mkdir -p ./stages/stage_03/
-  make_fasta ./stages/stage_01/hg38_fair+new_CAGE_peaks_phase1and2.bed  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa
-  make_fasta ./stages/stage_01/hg38_fair+new_CAGE_peaks_phase1and2.bed  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa
+  flanks_fasta 250u 10d ./stages/stage_02/hg38_fair+new_CAGE_peaks_phase1and2  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa
 }
 
 stage_04() {
@@ -57,11 +58,8 @@ stage_04() {
 
   mkdir -p ./stages/stage_04/
   (
-    motif_occupancies_cmd  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed
-    motif_occupancies_cmd  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed
-
-    motif_besthits_cmd  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed
-    motif_besthits_cmd  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed
+    motif_occupancies_flanks_cmd 250u 10d  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed
+    motif_besthits_flanks_cmd 250u 10d  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed
   ) | parallel -j ${NUM_THREADS}
 }
 
@@ -70,4 +68,4 @@ stage_04() {
 stage_01
 stage_02
 stage_03
-stage_04 4 # adjust for number of threads available
+stage_04 100 # adjust for number of threads available
