@@ -69,6 +69,7 @@ motif_besthits_logpval_cmd(){
               besthit \
               --pvalues-file "source_data/motifs/thresholds/${MOTIF_BN}.thr" \
               --output-scoring-mode logpvalue \
+              --add-flanks \
           " | ruby app/convert_sarus_scoresFasta_to_tsv.rb " \
           " > ./stages/stage_04/besthit-logpval@${MOTIF_BN}@${OUTPUT_BN}"
   done
@@ -92,6 +93,7 @@ motif_besthits_score_cmd(){
               "${MOTIF_FN}" \
               besthit \
               --output-scoring-mode score \
+              --add-flanks \
           " | ruby app/convert_sarus_scoresFasta_to_tsv.rb" \
           " > ./stages/stage_04/besthit-score@${MOTIF_BN}@${OUTPUT_BN}"
   done
