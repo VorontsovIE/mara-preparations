@@ -59,7 +59,7 @@ stage_04() {
   mkdir -p ./stages/stage_04/
   (
     motif_occupancies_flanks_cmd 250u 10d  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed
-    motif_besthits_flanks_cmd 250u 10d  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed
+    # motif_besthits_flanks_cmd 250u 10d  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed
   ) | parallel -j ${NUM_THREADS}
 }
 
