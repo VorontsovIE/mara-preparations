@@ -13,11 +13,11 @@ stage_00_2() {
   rm -rf source_data/motifs/
   mkdir -p source_data/motifs/
   pushd source_data/motifs
-      wget https://hocomoco13.autosome.org/final_bundle/hocomoco13/H13CORE-CLUSTERED/H13CORE-CLUSTERED_annotation.jsonl
-      wget https://hocomoco13.autosome.org/final_bundle/hocomoco13/H13CORE-CLUSTERED/H13CORE-CLUSTERED_pwm.tar.gz
-      wget https://hocomoco13.autosome.org/final_bundle/hocomoco13/H13CORE-CLUSTERED/H13CORE-CLUSTERED_pcm.tar.gz
-      wget https://hocomoco13.autosome.org/final_bundle/hocomoco13/H13CORE-CLUSTERED/H13CORE-CLUSTERED_pfm.tar.gz
-      wget https://hocomoco13.autosome.org/final_bundle/hocomoco13/H13CORE-CLUSTERED/H13CORE-CLUSTERED_thresholds.tar.gz
+      wget https://hocomoco14.autosome.org/final_bundle/hocomoco14/H14CORE-CLUSTERED/H14CORE-CLUSTERED_annotation.jsonl
+      wget https://hocomoco14.autosome.org/final_bundle/hocomoco14/H14CORE-CLUSTERED/H14CORE-CLUSTERED_pwm.tar.gz
+      wget https://hocomoco14.autosome.org/final_bundle/hocomoco14/H14CORE-CLUSTERED/H14CORE-CLUSTERED_pcm.tar.gz
+      wget https://hocomoco14.autosome.org/final_bundle/hocomoco14/H14CORE-CLUSTERED/H14CORE-CLUSTERED_pfm.tar.gz
+      wget https://hocomoco14.autosome.org/final_bundle/hocomoco14/H14CORE-CLUSTERED/H14CORE-CLUSTERED_thresholds.tar.gz
       for FN in $(ls *.tar.gz); do tar -zxf "${FN}"; done
   popd
 }

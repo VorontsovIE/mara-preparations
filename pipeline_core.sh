@@ -38,7 +38,7 @@ motif_occupancies_flanks_cmd(){
 motif_occupancies_cmd(){
   INPUT_FN="$1" # ./stages/stage_03/TSS_clusters.fa
   OUTPUT_BN="$2" # TSS.bed
-  for MOTIF_FN in $( find source_data/motifs/pfm/ -xtype f -iname '*.pfm' ); do
+  for MOTIF_FN in $( find source_data/motifs/H14CORE-CLUSTERED/pfm/ -xtype f -iname '*.pfm' ); do
       MOTIF_BN=$(basename -s .pfm "${MOTIF_FN}" )
       echo "java -cp app/sarus.jar ru.autosome.SARUS ${INPUT_FN}"  \
               "${MOTIF_FN}" \
@@ -63,12 +63,12 @@ motif_besthits_logpval_flanks_cmd(){
 motif_besthits_logpval_cmd(){
   INPUT_FN="$1" # ./stages/stage_03/TSS_clusters.fa
   OUTPUT_BN="$2" # TSS.bed
-  for MOTIF_FN in $( find source_data/motifs/pwm/ -xtype f -iname '*.pwm' ); do
+  for MOTIF_FN in $( find source_data/motifs/H14CORE-CLUSTERED/pwm/ -xtype f -iname '*.pwm' ); do
       MOTIF_BN=$(basename -s .pwm "${MOTIF_FN}" )
       echo "java -cp app/sarus.jar ru.autosome.SARUS ${INPUT_FN}"  \
               "${MOTIF_FN}" \
               besthit \
-              --pvalues-file "source_data/motifs/thresholds/${MOTIF_BN}.thr" \
+              --pvalues-file "source_data/motifs/H14CORE-CLUSTERED/thresholds/${MOTIF_BN}.thr" \
               --output-scoring-mode logpvalue \
           " | ruby app/convert_sarus_scoresFasta_to_tsv.rb " \
           " > ./stages/stage_04/besthit-logpval@${MOTIF_BN}@${OUTPUT_BN}"
@@ -87,7 +87,7 @@ motif_besthits_score_flanks_cmd(){
 motif_besthits_score_cmd(){
   INPUT_FN="$1" # ./stages/stage_03/TSS_clusters.fa
   OUTPUT_BN="$2" # TSS.bed
-  for MOTIF_FN in $( find source_data/motifs/pwm/ -xtype f -iname '*.pwm' ); do
+  for MOTIF_FN in $( find source_data/motifs/H14CORE-CLUSTERED/pwm/ -xtype f -iname '*.pwm' ); do
       MOTIF_BN=$(basename -s .pwm "${MOTIF_FN}" )
       echo "java -cp app/sarus.jar ru.autosome.SARUS ${INPUT_FN}"  \
               "${MOTIF_FN}" \
