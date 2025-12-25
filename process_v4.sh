@@ -36,30 +36,30 @@ stage_00() {
 }
 
 stage_01() {
-  mkdir -p ./stages/stage_01.preprocess/
-  mkdir -p ./stages/stage_01/
+  mkdir -p ./stages_fantomus/stage_01.preprocess/
+  mkdir -p ./stages_fantomus/stage_01/
 
-  ln -s ../../source_data/data-v3/hg38_fair+new_CAGE_peaks_phase1and2.bed stages/stage_01/
+  ln -s ../../source_data/data-v3/hg38_fair+new_CAGE_peaks_phase1and2.bed stages_fantomus/stage_01/
 }
 
 stage_02() {
-  mkdir -p ./stages/stage_02/
-  # 7-th column used for peak summit
-  make_flanks 250u 10d  ./stages/stage_01/hg38_fair+new_CAGE_peaks_phase1and2.bed  ./stages/stage_02/hg38_fair+new_CAGE_peaks_phase1and2  7
+  mkdir -p ./stages_fantomus/stage_02/
+  # 5-th column used for peak summit
+  make_flanks 250u 10d  <( cat ./stages_fantomus/stage_01/hg38_fair+new_CAGE_peaks_phase1and2.bed | awk -F $'\t' -e '$7 == "TSS"') ./stages_fantomus/stage_02/hg38_fair+new_CAGE_peaks_phase1and2  5
 }
 
 stage_03() {
-  mkdir -p ./stages/stage_03/
-  flanks_fasta 250u 10d ./stages/stage_02/hg38_fair+new_CAGE_peaks_phase1and2  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa
+  mkdir -p ./stages_fantomus/stage_03/
+  flanks_fasta 250u 10d ./stages_fantomus/stage_02/hg38_fair+new_CAGE_peaks_phase1and2  ./stages_fantomus/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa
 }
 
 stage_04() {
   NUM_THREADS=${1:-10} # 10 threads by default
 
-  mkdir -p ./stages/stage_04/
+  mkdir -p ./stages_fantomus/stage_04/
   (
-    motif_occupancies_flanks_cmd 250u 10d  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed ./stages/stage_04
-    # motif_besthits_flanks_cmd 250u 10d  ./stages/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed ./stages/stage_04
+    motif_occupancies_flanks_cmd 250u 10d  ./stages_fantomus/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed ./stages_fantomus/stage_04
+    # motif_besthits_flanks_cmd 250u 10d  ./stages_fantomus/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed ./stages_fantomus/stage_04
   ) | parallel -j ${NUM_THREADS}
 }
 

@@ -59,11 +59,11 @@ stage_04() {
 
   mkdir -p ./stages/stage_04/
   (
-    motif_occupancies_flanks_cmd 250u 10d  ./stages/stage_03/Credible_TSSclusters_summit_v2  Credible_TSSclusters_summit_v2
-    motif_occupancies_flanks_cmd 0    50d  ./stages/stage_03/Credible_TSSclusters_summit_v2  Credible_TSSclusters_summit_v2
+    motif_occupancies_flanks_cmd 250u 10d  ./stages/stage_03/Credible_TSSclusters_summit_v2  Credible_TSSclusters_summit_v2 ./stages/stage_04
+    motif_occupancies_flanks_cmd 0    50d  ./stages/stage_03/Credible_TSSclusters_summit_v2  Credible_TSSclusters_summit_v2 ./stages/stage_04
 
-    motif_besthits_flanks_cmd 250u 10d  ./stages/stage_03/Credible_TSSclusters_summit_v2  Credible_TSSclusters_summit_v2
-    motif_besthits_flanks_cmd 0    50d  ./stages/stage_03/Credible_TSSclusters_summit_v2  Credible_TSSclusters_summit_v2
+    motif_besthits_flanks_cmd 250u 10d  ./stages/stage_03/Credible_TSSclusters_summit_v2  Credible_TSSclusters_summit_v2 ./stages/stage_04
+    motif_besthits_flanks_cmd 0    50d  ./stages/stage_03/Credible_TSSclusters_summit_v2  Credible_TSSclusters_summit_v2 ./stages/stage_04
   ) | parallel -j ${NUM_THREADS}
 }
 

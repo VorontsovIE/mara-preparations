@@ -31,13 +31,16 @@ motif_occupancies_flanks_cmd(){
   FLANK_3=$2
   INPUT_FN_PREFIX="$3" # ./stages/stage_03/TSS_clusters
   OUTPUT_BN_PREFIX="$4" # TSS
+  OUTPUT_FOLDER="$5" # ./stages/stage_04/
   motif_occupancies_cmd "${INPUT_FN_PREFIX}_${FLANK_5}_${FLANK_3}_around_center.fa" \
-                        "${OUTPUT_BN_PREFIX}_${FLANK_5}_${FLANK_3}.bed"
+                        "${OUTPUT_BN_PREFIX}_${FLANK_5}_${FLANK_3}.bed" \
+                        "${OUTPUT_FOLDER}"
 }
 
 motif_occupancies_cmd(){
   INPUT_FN="$1" # ./stages/stage_03/TSS_clusters.fa
   OUTPUT_BN="$2" # TSS.bed
+  OUTPUT_FOLDER="$3" # ./stages/stage_04/
   for MOTIF_FN in $( find source_data/motifs/H14CORE-CLUSTERED/pfm/ -xtype f -iname '*.pfm' ); do
       MOTIF_BN=$(basename -s .pfm "${MOTIF_FN}" )
       echo "java -cp app/sarus.jar ru.autosome.SARUS ${INPUT_FN}"  \
@@ -46,7 +49,7 @@ motif_occupancies_cmd(){
               --pfm-pseudocount 0.0001 \
               --naive \
           " | ruby app/convert_sarus_scoresFasta_to_tsv.rb" \
-          " > ./stages/stage_04/occupancy@${MOTIF_BN}@${OUTPUT_BN}"
+          " > ${OUTPUT_FOLDER}/occupancy@${MOTIF_BN}@${OUTPUT_BN}"
   done
 }
 
@@ -56,13 +59,16 @@ motif_besthits_logpval_flanks_cmd(){
   FLANK_3=$2
   INPUT_FN_PREFIX="$3" # ./stages/stage_03/TSS_clusters
   OUTPUT_BN_PREFIX="$4" # TSS
+  OUTPUT_FOLDER="$5" # ./stages/stage_04/
   motif_besthits_logpval_cmd "${INPUT_FN_PREFIX}_${FLANK_5}_${FLANK_3}_around_center.fa" \
-                             "${OUTPUT_BN_PREFIX}_${FLANK_5}_${FLANK_3}.bed"
+                             "${OUTPUT_BN_PREFIX}_${FLANK_5}_${FLANK_3}.bed" \
+                             "${OUTPUT_FOLDER}"
 }
 
 motif_besthits_logpval_cmd(){
   INPUT_FN="$1" # ./stages/stage_03/TSS_clusters.fa
   OUTPUT_BN="$2" # TSS.bed
+  OUTPUT_FOLDER="$3" # ./stages/stage_04/
   for MOTIF_FN in $( find source_data/motifs/H14CORE-CLUSTERED/pwm/ -xtype f -iname '*.pwm' ); do
       MOTIF_BN=$(basename -s .pwm "${MOTIF_FN}" )
       echo "java -cp app/sarus.jar ru.autosome.SARUS ${INPUT_FN}"  \
@@ -71,7 +77,7 @@ motif_besthits_logpval_cmd(){
               --pvalues-file "source_data/motifs/H14CORE-CLUSTERED/thresholds/${MOTIF_BN}.thr" \
               --output-scoring-mode logpvalue \
           " | ruby app/convert_sarus_scoresFasta_to_tsv.rb " \
-          " > ./stages/stage_04/besthit-logpval@${MOTIF_BN}@${OUTPUT_BN}"
+          " > ${OUTPUT_FOLDER}/besthit-logpval@${MOTIF_BN}@${OUTPUT_BN}"
   done
 }
 
@@ -80,13 +86,16 @@ motif_besthits_score_flanks_cmd(){
   FLANK_3=$2
   INPUT_FN_PREFIX="$3" # ./stages/stage_03/TSS_clusters
   OUTPUT_BN_PREFIX="$4" # TSS
+  OUTPUT_FOLDER="$5" # ./stages/stage_04/
   motif_besthits_score_cmd "${INPUT_FN_PREFIX}_${FLANK_5}_${FLANK_3}_around_center.fa" \
-                           "${OUTPUT_BN_PREFIX}_${FLANK_5}_${FLANK_3}.bed"
+                           "${OUTPUT_BN_PREFIX}_${FLANK_5}_${FLANK_3}.bed" \
+                           "${OUTPUT_FOLDER}"
 }
 
 motif_besthits_score_cmd(){
   INPUT_FN="$1" # ./stages/stage_03/TSS_clusters.fa
   OUTPUT_BN="$2" # TSS.bed
+  OUTPUT_FOLDER="$3" # ./stages/stage_04/
   for MOTIF_FN in $( find source_data/motifs/H14CORE-CLUSTERED/pwm/ -xtype f -iname '*.pwm' ); do
       MOTIF_BN=$(basename -s .pwm "${MOTIF_FN}" )
       echo "java -cp app/sarus.jar ru.autosome.SARUS ${INPUT_FN}"  \
@@ -94,7 +103,7 @@ motif_besthits_score_cmd(){
               besthit \
               --output-scoring-mode score \
           " | ruby app/convert_sarus_scoresFasta_to_tsv.rb" \
-          " > ./stages/stage_04/besthit-score@${MOTIF_BN}@${OUTPUT_BN}"
+          " > ${OUTPUT_FOLDER}/besthit-score@${MOTIF_BN}@${OUTPUT_BN}"
   done
 }
 
@@ -103,13 +112,15 @@ motif_besthits_flanks_cmd(){
   FLANK_3=$2
   INPUT_FN_PREFIX="$3" # ./stages/stage_03/TSS_clusters
   OUTPUT_BN_PREFIX="$4" # TSS
-  motif_besthits_score_flanks_cmd ${FLANK_5} ${FLANK_3} "${INPUT_FN_PREFIX}" "${OUTPUT_BN_PREFIX}"
-  motif_besthits_logpval_flanks_cmd ${FLANK_5} ${FLANK_3} "${INPUT_FN_PREFIX}" "${OUTPUT_BN_PREFIX}"
+  OUTPUT_FOLDER="$5" # ./stages/stage_04/
+  motif_besthits_score_flanks_cmd ${FLANK_5} ${FLANK_3} "${INPUT_FN_PREFIX}" "${OUTPUT_BN_PREFIX}" "${OUTPUT_FOLDER}"
+  motif_besthits_logpval_flanks_cmd ${FLANK_5} ${FLANK_3} "${INPUT_FN_PREFIX}" "${OUTPUT_BN_PREFIX}" "${OUTPUT_FOLDER}"
 }
 
 motif_besthits_cmd(){
   INPUT_FN="$1" # ./stages/stage_03/TSS_clusters.fa
   OUTPUT_BN="$2" # TSS.bed
-  motif_besthits_score_cmd "${INPUT_FN}" "${OUTPUT_BN}"
-  motif_besthits_logpval_cmd "${INPUT_FN}" "${OUTPUT_BN}"
+  OUTPUT_FOLDER="$3" # ./stages/stage_04/
+  motif_besthits_score_cmd "${INPUT_FN}" "${OUTPUT_BN}" "${OUTPUT_FOLDER}"
+  motif_besthits_logpval_cmd "${INPUT_FN}" "${OUTPUT_BN}" "${OUTPUT_FOLDER}"
 }
