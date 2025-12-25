@@ -35,7 +35,7 @@ end
 # 5  65418
 # 6  +
 def parse_line(line, position_getter: ->(row){ Integer(row[4]) })
-  row = line.split("\t")
+  row = line.chomp.split("\t")
 
   {
     chr: row[0], from: Integer(row[1]), to: Integer(row[2]),

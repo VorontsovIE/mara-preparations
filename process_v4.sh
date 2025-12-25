@@ -39,18 +39,18 @@ stage_01() {
   mkdir -p ./stages_fantomus/stage_01.preprocess/
   mkdir -p ./stages_fantomus/stage_01/
 
-  ln -s ../../source_data/data-v3/hg38_fair+new_CAGE_peaks_phase1and2.bed stages_fantomus/stage_01/
+  ln -s ../../source_data/data-v4/CAGE_clusters_FANTOMUS_annotated.bed stages_fantomus/stage_01/
 }
 
 stage_02() {
   mkdir -p ./stages_fantomus/stage_02/
   # 5-th column used for peak summit
-  make_flanks 250u 10d  <( cat ./stages_fantomus/stage_01/hg38_fair+new_CAGE_peaks_phase1and2.bed | awk -F $'\t' -e '$7 == "TSS"') ./stages_fantomus/stage_02/hg38_fair+new_CAGE_peaks_phase1and2  5
+  make_flanks 250u 10d  <( cat ./stages_fantomus/stage_01/CAGE_clusters_FANTOMUS_annotated.bed | awk -F $'\t' -e '((NR != 1) && ($7 == "TSS")) { print $1 "\t" $2 "\t" $3 "\t" $4 "@" $9 "\t" $5 "\t" $6 }' ) ./stages_fantomus/stage_02/CAGE_clusters_FANTOMUS_annotated  5
 }
 
 stage_03() {
   mkdir -p ./stages_fantomus/stage_03/
-  flanks_fasta 250u 10d ./stages_fantomus/stage_02/hg38_fair+new_CAGE_peaks_phase1and2  ./stages_fantomus/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa
+  flanks_fasta 250u 10d ./stages_fantomus/stage_02/CAGE_clusters_FANTOMUS_annotated  ./stages_fantomus/stage_03/CAGE_clusters_FANTOMUS_annotated.fa
 }
 
 stage_04() {
@@ -58,8 +58,8 @@ stage_04() {
 
   mkdir -p ./stages_fantomus/stage_04/
   (
-    motif_occupancies_flanks_cmd 250u 10d  ./stages_fantomus/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed ./stages_fantomus/stage_04
-    # motif_besthits_flanks_cmd 250u 10d  ./stages_fantomus/stage_03/hg38_fair+new_CAGE_peaks_phase1and2.fa  hg38_fair+new_CAGE_peaks_phase1and2.bed ./stages_fantomus/stage_04
+    motif_occupancies_flanks_cmd 250u 10d  ./stages_fantomus/stage_03/CAGE_clusters_FANTOMUS_annotated.fa  CAGE_clusters_FANTOMUS_annotated.bed ./stages_fantomus/stage_04
+    # motif_besthits_flanks_cmd 250u 10d  ./stages_fantomus/stage_03/CAGE_clusters_FANTOMUS_annotated.fa  CAGE_clusters_FANTOMUS_annotated.bed ./stages_fantomus/stage_04
   ) | parallel -j ${NUM_THREADS}
 }
 
